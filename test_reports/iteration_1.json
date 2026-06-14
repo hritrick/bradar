@@ -1,0 +1,99 @@
+{
+  "summary": "Completed comprehensive end-to-end testing of Business Radar AI application. Backend APIs: 100% pass rate (41/41 tests). Frontend: All major features functional with CRED-inspired dark theme. Identified 1 minor frontend RBAC issue with Add Business button visibility for Subscriber role.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Businesses.jsx",
+        "issue": "Add Business button (+ Add) visible for Subscriber role in top-right actions",
+        "location": "/app/frontend/src/pages/Businesses.jsx line 165",
+        "expected": "Button should be hidden for Subscriber role (read-only access)",
+        "actual": "Button is always rendered without role check",
+        "fix_priority": "MEDIUM",
+        "fix_suggestion": "Add role check: {user?.role !== 'Subscriber' && <Link to='/businesses/new' className='btn-primary'><Plus className='h-4 w-4' /> Add</Link>}"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "issue": "Discovery nav item not visible for Subscriber role",
+        "affected_screen": ["Sidebar navigation"],
+        "severity": "LOW",
+        "note": "Expected Discovery to be visible for Subscriber but it's hidden. May be intentional design decision."
+      }
+    ]
+  },
+  "passed_tests": [
+    "Backend API health check (GET /api/)",
+    "Authentication: Admin/Analyst/Subscriber login with correct credentials",
+    "Authentication: Bad credentials return 401",
+    "Authentication: GET /api/auth/me returns current user",
+    "Authentication: Password reset with current/new password",
+    "Authentication: Google OAuth status returns configured=false",
+    "Dashboard: GET /api/dashboard returns KPIs and analytics",
+    "Users CRUD: Admin can list/create/update/delete users",
+    "Users CRUD: Analyst cannot access (403)",
+    "Businesses CRUD: List with pagination and filters",
+    "Businesses CRUD: Create with AI enrichment (6-10 sec)",
+    "Businesses CRUD: Get detail with predictions and lead scores",
+    "Businesses CRUD: Update business",
+    "Businesses CRUD: Re-run AI enrichment",
+    "Businesses CRUD: Filter by city works correctly",
+    "Businesses CRUD: Subscriber cannot create (403)",
+    "Discovery: List connectors (5 connectors including sample_seed)",
+    "Discovery: Run sample_seed with limit=3",
+    "Reports: List reports",
+    "Reports: Get today's report (auto-generated)",
+    "Reports: Generate report",
+    "Reports: Get report detail",
+    "Settings: Admin can get/update settings",
+    "Settings: Analyst cannot access (403)",
+    "Audit Logs: Admin can list and filter by action",
+    "Audit Logs: Analyst cannot access (403)",
+    "Preferences: Get and update preferences",
+    "Scheduler: Admin can get status and run-now",
+    "Scheduler: Analyst cannot access (403)",
+    "CSV Upload: Preview mode returns row count",
+    "CSV Upload: Ingestion mode processes rows with deduplication",
+    "Frontend: Login page renders with CRED dark theme (rgb(12,12,14))",
+    "Frontend: Login redirects to dashboard after successful auth",
+    "Frontend: Dashboard shows 4 KPI cards (Total, Today's New, Hot Leads, Avg Score)",
+    "Frontend: Dashboard renders 36 SVG chart elements (Recharts)",
+    "Frontend: Dashboard shows 7-day trend, by-city, by-category, by-predicted-need",
+    "Frontend: Sidebar navigation shows all 9 expected items for Admin",
+    "Frontend: Businesses page with filters (pincode, city, state, category, lead, score, date, source)",
+    "Frontend: Businesses page with search bar and paginated table",
+    "Frontend: Businesses page with CSV/Excel export buttons",
+    "Frontend: Add Business form with 18 fields",
+    "Frontend: CSV Upload page with file input",
+    "Frontend: Discovery page with connectors and run buttons",
+    "Frontend: Reports page with today's report and past reports list",
+    "Frontend: Preferences page with 2 toggle switches",
+    "Frontend: Admin Users page lists 5 users",
+    "Frontend: Admin Settings page with tabbed groups (Google OAuth, Email, Discovery, Scheduler)",
+    "Frontend: Admin Audit Logs page with 26+ entries and filter capability",
+    "Frontend: Admin Scheduler page shows status=Running, next run, recent runs",
+    "Frontend: RBAC - Analyst role hides Admin section correctly",
+    "Frontend: RBAC - Subscriber role hides Admin section, Add Business nav, CSV Upload nav"
+  ],
+  "test_report_links": [
+    "/app/backend/backend_test.py",
+    "/root/.emergent/automation_output/20260614_191242/console_20260614_191242.log",
+    "/root/.emergent/automation_output/20260614_191326/console_20260614_191326.log",
+    "/root/.emergent/automation_output/20260614_191359/console_20260614_191359.log",
+    "/root/.emergent/automation_output/20260614_191500/console_20260614_191500.log"
+  ],
+  "action_item_for_main_agent": "Fix frontend RBAC issue: Add role check in /app/frontend/src/pages/Businesses.jsx line 165 to hide '+ Add' button for Subscriber role. Verify if Discovery nav item should be visible for Subscriber role (currently hidden).",
+  "updated_files": [
+    "/app/backend/backend_test.py"
+  ],
+  "success_percentage": {
+    "backend": "100% (41/41 tests passed)",
+    "frontend": "98% (50/51 checks passed, 1 RBAC issue)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": true
+}
