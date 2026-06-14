@@ -1,0 +1,42 @@
+[
+  {
+    "content": "Phase 1: Install & configure PostgreSQL in container, set DATABASE_URL",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Get Emergent LLM Key + integration playbook",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Create POC script (Postgres + LLM enrich/predict/score + PDF + Excel)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Run POC script until fully green",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Design guidelines via design_agent",
+    "status": "in_progress"
+  },
+  {
+    "content": "Phase 2: Backend full implementation (models, auth, pipeline, reports, scheduler, audit)",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: Frontend full implementation (all routes, RBAC UI, exports, mobile)",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: Seed admin user (Dhananjay) + sample Mumbai businesses",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: All user stories covered in development",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: End-to-End testing with testing_agent_v3 + fix all bugs",
+    "status": "pending"
+  }
+]
