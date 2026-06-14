@@ -65,11 +65,10 @@ class TestRunner:
     # ========== TEST 1: ALEMBIC MIGRATION STATE ==========
     def test_alembic_migration(self):
         print("\n" + "="*80)
-        print("TEST 1: ALEMBIC MIGRATION STATE")
+        print("TEST 1: ALEMBIC MIGRATION STATE (Verify migration 0002)")
         print("="*80)
         
         # We'll verify via healthz endpoint that DB is accessible
-        # The actual table verification was done via psql in the test setup
         try:
             resp = requests.get(f"{BASE_URL}/healthz", timeout=5)
             self.test(
@@ -78,9 +77,18 @@ class TestRunner:
                 f"Status: {resp.status_code}"
             )
             
-            # Verify backend logs show Alembic ran (checked manually)
-            self.log("Alembic: Verified 15 tables exist including alembic_version at head '0001_initial_schema'", "INFO")
-            self.log("Alembic: Verified create_all() not used in production code (only in poc_core.py and migration)", "INFO")
+            # CRITICAL: Verify migration 0002 is applied (NOT 0001)
+            # We'll check this by verifying businesses endpoint works (which requires source_run_id column)
+            if self.admin_token:
+                resp_biz = requests.get(f"{BASE_URL}/businesses?page_size=1", headers=self.headers(self.admin_token), timeout=10)
+                self.test(
+                    "Alembic: Migration 0002 applied (businesses.source_run_id column exists)",
+                    resp_biz.status_code == 200,
+                    f"Status: {resp_biz.status_code} - If 500, migration 0002 not applied"
+                )
+                
+                # Verify alembic_version is at 0002 by checking if businesses query works
+                self.log("Alembic: Migration 0002_business_source_run_id should be applied (adds source_run_id column, FK, and index)", "INFO")
             
         except Exception as e:
             self.test("Alembic: Database health check", False, str(e))
@@ -91,8 +99,9 @@ class TestRunner:
         print("TEST 2: RATE LIMITING ON POST /api/auth/login")
         print("="*80)
         
-        # Wait to clear any previous rate limit state
-        time.sleep(12)
+        # Wait to clear any previous rate limit state (15s as requested)
+        self.log("Waiting 15s to clear any previous rate limit state...", "INFO")
+        time.sleep(15)
         
         # Test burst limit (5 calls / 10s)
         wrong_creds = {"email": "test.admin@businessradar.ai", "password": "WrongPassword123"}
@@ -125,9 +134,9 @@ class TestRunner:
             f"Responses: {burst_responses}"
         )
         
-        # Wait for burst window to clear
-        self.log("Waiting 12s for burst window to clear...", "INFO")
-        time.sleep(12)
+        # Wait for burst window to clear (15s as requested)
+        self.log("Waiting 15s for burst window to clear...", "INFO")
+        time.sleep(15)
         
         # Test successful login clears burst counter
         self.log("Testing successful login clears burst counter...", "INFO")
@@ -531,10 +540,11 @@ class TestRunner:
                             "Content-Disposition" in resp_pdf.headers,
                             f"Content-Disposition: {resp_pdf.headers.get('Content-Disposition', '')}"
                         )
+                        pdf_size = len(resp_pdf.content)
                         self.test(
-                            "Reports: PDF download has content",
-                            len(resp_pdf.content) > 0,
-                            f"Size: {len(resp_pdf.content)} bytes"
+                            "Reports: PDF download has content (>1KB)",
+                            pdf_size > 1024,
+                            f"Size: {pdf_size} bytes"
                         )
                     
                     # Test CSV download
@@ -763,6 +773,29 @@ class TestRunner:
                 resp.status_code == 403,
                 f"Status: {resp.status_code}"
             )
+            
+            # Subscriber CAN download PDF reports (read access)
+            # First get a report ID
+            resp_reports = requests.get(
+                f"{BASE_URL}/reports",
+                headers=self.headers(self.subscriber_token),
+                timeout=10
+            )
+            if resp_reports.status_code == 200:
+                reports = resp_reports.json()
+                if reports and len(reports) > 0:
+                    report_id = reports[0].get("id")
+                    if report_id:
+                        resp_pdf = requests.get(
+                            f"{BASE_URL}/reports/{report_id}/download/pdf",
+                            headers=self.headers(self.subscriber_token),
+                            timeout=15
+                        )
+                        self.test(
+                            "RBAC: Subscriber CAN download PDF reports (GET /api/reports/{id}/download/pdf)",
+                            resp_pdf.status_code == 200,
+                            f"Status: {resp_pdf.status_code}"
+                        )
         
         # Test unauthenticated access
         self.log("Testing unauthenticated access...", "INFO")

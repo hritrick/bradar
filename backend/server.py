@@ -118,7 +118,8 @@ app = FastAPI(title="Business Radar AI", version="1.2.0", lifespan=lifespan)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc):
-    log.exception("Unhandled error")
+    # Log with traceback + URL so we can debug 500s from logs.
+    log.exception("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 

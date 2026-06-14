@@ -194,6 +194,7 @@ class DailyReportOut(BaseModel):
     id: str
     report_date: date
     report_json: Dict[str, Any]
+    report_pdf: Optional[str] = None
     generated_by: Optional[str]
     created_at: datetime
 
@@ -202,6 +203,7 @@ class DailyReportListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     report_date: date
+    report_pdf: Optional[str] = None
     generated_by: Optional[str]
     created_at: datetime
 

@@ -1,0 +1,95 @@
+{
+  "summary": "Completed comprehensive re-validation of Business Radar AI after main agent fixed 4 critical bugs from iteration_3. ALL 54 TESTS PASSED (100% success rate). All 7 architectural areas now pass clean: Alembic migration 0002 applied, rate limiting working, idempotency working, scheduler working, health monitoring working, report generation FIXED (PDF/CSV/XLSX downloads all working), and RBAC FIXED for all three roles including Subscriber.",
+  
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": [],
+    "passed_tests": [
+      "✅ ALEMBIC: Migration 0002_business_source_run_id applied (verified via psql: version_num = '0002_business_source_run_id')",
+      "✅ ALEMBIC: businesses.source_run_id column exists with FK to discovery_source_runs(id) ON DELETE SET NULL",
+      "✅ ALEMBIC: Index ix_businesses_source_run_id exists",
+      "✅ ALEMBIC: GET /api/businesses returns 200 (confirms schema drift fixed)",
+      "✅ RATE LIMITING: Burst limit triggered (6 rapid wrong-password logins → 429 with Retry-After header)",
+      "✅ RATE LIMITING: Successful login after 15s burst window clears counter",
+      "✅ IDEMPOTENCY: First discovery run succeeds, second with same key returns cached result (no new inserts)",
+      "✅ IDEMPOTENCY: Same key with different payload returns 409 Conflict",
+      "✅ SCHEDULER: PATCH schedule_cron with valid cron (*/5 * * * *) succeeds and updates DB",
+      "✅ SCHEDULER: PATCH with invalid cron ('not a cron') still succeeds (scheduler skips it, logs warning)",
+      "✅ SCHEDULER: PATCH with null cron clears schedule",
+      "✅ HEALTH: GET /api/discovery/health returns correct structure (totals, queue, sources)",
+      "✅ HEALTH: Source-level health has rolling_24h stats with all expected keys",
+      "✅ HEALTH: Alert levels are green/amber/red",
+      "✅ HEALTH: Run count increases after discovery run",
+      "✅ HEALTH: last_success_at populated after successful run",
+      "✅ HEALTH: GET /api/discovery/sources/{id}/health works",
+      "✅ REPORTS (FIXED): GET /api/reports/today returns 200 with report_pdf field populated (file:///app/backend/reports_out/daily-reports/daily_2026-06-14.pdf)",
+      "✅ REPORTS (FIXED): POST /api/reports/generate returns 200 with fresh PDF URI",
+      "✅ REPORTS (FIXED): GET /api/reports/{id}/download/pdf returns valid binary PDF (4297 bytes, >1KB)",
+      "✅ REPORTS (FIXED): PDF has correct content-type (application/pdf) and Content-Disposition header",
+      "✅ REPORTS (FIXED): CSV download works (GET /api/reports/{id}/download/csv returns 200)",
+      "✅ REPORTS (FIXED): XLSX download works (GET /api/reports/{id}/download/xlsx returns 200)",
+      "✅ REPORTS (FIXED): Signed URL endpoint returns {url:null, expires_in:0} for local storage",
+      "✅ RBAC: Admin can PATCH /api/discovery/sources, POST /api/discovery/queue/process, POST /api/reports/generate",
+      "✅ RBAC: Analyst can POST /api/discovery/run, POST /api/discovery/sources/{id}/run, POST /api/reports/generate",
+      "✅ RBAC: Analyst CANNOT PATCH /api/discovery/sources (403 correct)",
+      "✅ RBAC (FIXED): Subscriber CAN GET /api/businesses (200, was 500 in iteration_3)",
+      "✅ RBAC (FIXED): Subscriber CAN GET /api/dashboard (200, was 500 in iteration_3)",
+      "✅ RBAC (FIXED): Subscriber CAN GET /api/reports (200)",
+      "✅ RBAC (FIXED): Subscriber CAN download PDF reports (GET /api/reports/{id}/download/pdf returns 200)",
+      "✅ RBAC: Subscriber CANNOT POST /api/discovery/run (403 correct)",
+      "✅ RBAC: Subscriber CANNOT PATCH /api/discovery/sources (403 correct)",
+      "✅ RBAC: Subscriber CANNOT POST /api/reports/generate (403 correct)",
+      "✅ RBAC: Unauthenticated GET /api/businesses returns 401",
+      "✅ RBAC: Public endpoints /api/ and /api/healthz accessible without auth"
+    ]
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": [
+    "Alembic Migration 0002: Applied successfully with source_run_id column, FK, and index",
+    "Rate Limiting: Burst and sustained limits working with 429 + Retry-After, 15s sleep between scenarios",
+    "Idempotency: Cached responses and 409 conflict detection working",
+    "Scheduler: Dynamic schedule registration, updates, and invalid cron handling working",
+    "Health Monitoring: Rolling 24h stats with alert levels working",
+    "Report Generation: PDF/CSV/XLSX downloads all working, report_pdf field populated, PDF size >1KB",
+    "RBAC: All three roles (Admin, Analyst, Subscriber) working correctly with proper read/write permissions"
+  ],
+  
+  "test_report_links": ["/app/backend/backend_test.py", "/tmp/test_output.log"],
+  
+  "success_percentage": {
+    "backend": "100% (54/54 tests passed)",
+    "frontend": "N/A (frontend testing skipped as requested)"
+  },
+  
+  "updated_files": [
+    "/app/backend/backend_test.py"
+  ],
+  
+  "action_item_for_main_agent": {
+    "priority_1_critical": [],
+    "priority_2_high": [],
+    "verification_completed": [
+      "✅ Alembic migration 0002 applied (verified via psql: version_num = '0002_business_source_run_id')",
+      "✅ businesses.source_run_id column exists with FK fk_businesses_source_run_id to discovery_source_runs(id) ON DELETE SET NULL",
+      "✅ Index ix_businesses_source_run_id exists",
+      "✅ All 4 bugs from iteration_3 are now FIXED:",
+      "  1. Schema drift on businesses.source_run_id → FIXED via migration 0002",
+      "  2. DailyReportOut schema missing report_pdf field → FIXED (field now present and populated)",
+      "  3. Global exception handler logging → FIXED (now logs method + path + traceback)",
+      "  4. Subscriber role 500 errors on /api/businesses and /api/dashboard → FIXED (both return 200)",
+      "✅ Report generation fully working: PDF (4297 bytes), CSV, XLSX downloads all return 200",
+      "✅ All RBAC permissions working correctly for Admin, Analyst, and Subscriber roles",
+      "✅ Rate limiting, idempotency, scheduler, and health monitoring all working as expected"
+    ],
+    "notes": "ALL 7 AREAS NOW PASS CLEAN. Main agent successfully resolved all issues from iteration_3. No further action required."
+  },
+  
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}
