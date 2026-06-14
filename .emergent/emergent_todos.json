@@ -12,7 +12,7 @@
     "status": "completed"
   },
   {
-    "content": "Fix bug: schema drift — businesses.source_run_id missing in DB (created Alembic 0002 migration)",
+    "content": "Fix bug: schema drift — businesses.source_run_id missing in DB",
     "status": "completed"
   },
   {
@@ -20,15 +20,15 @@
     "status": "completed"
   },
   {
-    "content": "Fix bug: log.exception not surfacing tracebacks (improved log format with method+path)",
+    "content": "Fix bug: global exception handler not logging traceback",
     "status": "completed"
   },
   {
     "content": "Re-run testing_agent to verify all 7 areas pass",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "content": "Update plan.md with verification results",
-    "status": "pending"
+    "status": "completed"
   }
 ]

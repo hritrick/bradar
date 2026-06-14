@@ -255,61 +255,52 @@
 
 ---
 
-### Phase 4 — Integrations + Hardening (optional next)
-**Goal:** Convert remaining placeholders into production integrations; harden for large-scale India-wide deployment.
+### Phase 4 — Architectural Hardening ✅ COMPLETED (validated 2026-06-14)
+**Goal:** Harden the MVP with production-grade security, reliability, and observability.
 
-1. **Google OAuth completion:**
-   - Implement callback endpoint + token exchange + user provisioning.
-   - Support multiple OAuth providers (future).
+**Implemented & validated (100% — 54/54 backend tests passed in iteration_4):**
+1. **Alembic migrations** — replaces `create_all()`. Programmatic upgrade on FastAPI lifespan.
+   - `0001_initial_schema` — baseline.
+   - `0002_business_source_run_id` — adds lineage column, FK, index (idempotent; repairs schema drift on existing DBs).
+2. **Login rate limiting** — sliding-window in-memory limiter (`rate_limit.py`): 5/10s burst + 10/min sustained, per client IP. 429 with `Retry-After` header.
+3. **Idempotency** — DB-backed (`idempotency_keys` table) with payload-hash conflict detection. `Idempotency-Key` header accepted on `POST /api/discovery/run` and `POST /api/discovery/sources/{id}/run`. Replays return cached response; conflicting payloads → 409.
+4. **APScheduler dynamic schedules** — daily report at 08:00 IST + per-source discovery cron jobs registered from DB. Invalid crons logged + skipped (not crashing). Schedules hot-reload on `PATCH /api/discovery/sources/{id}`.
+5. **Source health monitor** — rolling 24h success/error/duration stats per source; green/amber/red alerts. Exposed via `GET /api/discovery/health` and `GET /api/discovery/sources/{id}/health`.
+6. **Storage abstraction** — `storage_service.py` with `LocalDiskStorage` + `S3CompatibleStorage` (AWS S3 / R2 / MinIO / Spaces). PDF reports return `file://` or `s3://` URIs; signed-URL endpoint for S3.
+7. **RBAC validated** — Admin/Analyst/Subscriber permissions enforced end-to-end across discovery, reports, and admin endpoints. Subscribers have read access; analysts can run discovery + generate reports; only admins can mutate sources or manage users.
+8. **Improved error logging** — global exception handler now logs `METHOD /path` + traceback for faster RCA.
+9. **Config validation** — `config.py` refuses to start in production with insecure JWT secret / CORS `*`.
+10. **Backup script** — `scripts/backup_db.sh` for daily Postgres dumps (cron-friendly).
+11. **DB outside pod** — NOT possible in current sandbox; documented in `BACKUP.md`. Production deploy must use managed RDS/Cloud SQL.
 
-2. **Email delivery completion:**
-   - Attach report PDFs and/or provide secure download links.
-   - Add delivery logs table (sent/skipped/failure reasons).
+**Bugs surfaced & fixed in this phase (iteration_3 → iteration_4):**
+- Schema drift: `businesses.source_run_id` added to model but missing from existing DB → fixed via Alembic 0002.
+- `DailyReportOut` was hiding `report_pdf` from API responses → field added to schema.
+- Global exception handler swallowed tracebacks → now logs method + path + full traceback.
 
-3. **Provider integrations (real implementations):**
-   - OpenCorporates: robust API paging/ratelimiting/normalization.
-   - Google Business: full Places details calls (phone/website), quotas/ratelimiting.
-   - IndiaMART/Justdial: partner API integration (requires credentials/contract).
-   - MCA: keep placeholder unless a compliant integration is approved.
+**Validation:** `/app/test_reports/iteration_4.json` — 54/54 tests passed (100%).
 
-4. **Scheduling improvements:**
-   - Persist per-source schedules and register APScheduler jobs per enabled provider.
-   - Retry policies and backoff for provider errors.
+---
 
-5. **Scale hardening:**
-   - Alembic migrations.
-   - Query plan checks + index tuning.
-   - Partitioning strategy for `businesses` by `registration_date`/`state`.
-   - Observability (structured logs, metrics) and rate limiting.
+### Phase 5 — Multi-Tenancy + Billing (planned)
+**Goal:** Convert app from single-tenant MVP to multi-tenant SaaS.
+1. Add `tenant_id` to all core tables; PostgreSQL Row-Level Security policies.
+2. Stripe integration for subscription tiers (Starter / Pro / Enterprise).
+3. Tenant onboarding flow + admin tenant management UI.
 
-6. **Security hardening:**
-   - Remove/rotate seeded QA accounts in production.
-   - Optional MFA/2FA.
-
-**Phase 4 user stories:**
-1. As an Admin, I can configure Google OAuth and complete Google sign-in.
-2. As an Admin, I can configure email delivery and see delivery logs.
-3. As an Analyst, I can run real OpenCorporates / Google Business discovery and ingest results.
-4. As an Admin, I can manage per-source schedules and reliability controls.
+### Phase 6 — Integrations + Geo (planned)
 
 ---
 
 ## 3) Next Actions (immediate)
-1. **Decide integration scope for next iteration:**
-   - Provide OpenCorporates API token (optional).
-   - Provide Google Places API key (optional).
-   - Provide SendGrid key and confirm sender domain (optional).
-   - Provide Google OAuth Client ID/Secret + Redirect URI.
-
-2. **Production readiness checklist:**
-   - Remove/rotate QA users.
-   - Configure JWT secret + DB credentials securely.
-   - Confirm audit log retention policy.
-
-3. **Hardening improvements:**
-   - Add Alembic migrations.
-   - Add delivery logs table.
-   - Add keyset pagination for very large datasets.
+1. **Phase 5 — Multi-Tenancy & Billing** (largest remaining work):
+   - Add `tenant_id` to all tables + PostgreSQL Row-Level Security policies.
+   - Stripe subscription tiers (need Stripe test/live keys from user).
+2. **API Versioning** — migrate routes to `/api/v1/...` (also update `frontend/src/lib/api.js`).
+3. **Google OAuth callback** — finish OAuth exchange (currently only `/auth/google/start` stubbed). Need `GOOGLE_CLIENT_ID/SECRET` from user.
+4. **Performance** — Redis caching for `/api/dashboard` (60s TTL) + cursor-based pagination for `/api/businesses`.
+5. **Security** — MFA (TOTP), JWT refresh tokens + revocation list.
+6. **Geo Intelligence** — PostGIS extension, India pincode dataset, H3/S2 hex indexing.
 
 ---
 
