@@ -1,0 +1,112 @@
+{
+  "summary": "Completed comprehensive backend testing of Business Radar AI architectural refactor (Alembic, rate limiting, idempotency, scheduler, health monitor, reports, RBAC). 37/44 tests passed (84.1%). Core architectural features working correctly. Found 7 failing tests related to report PDF generation and some endpoint 500 errors.",
+  
+  "backend_issues": {
+    "critical_bugs": [
+      {
+        "endpoint": "POST /api/reports/generate",
+        "issue": "Returns 500 Internal Server Error when generating reports",
+        "impact": "Blocks report generation for Admin and Analyst roles",
+        "fix_priority": "HIGH",
+        "details": "Tested with valid payload {report_date: '2026-06-14', filters: {}}. Error is caught by global exception handler, actual error not visible in logs. Likely issue with PDF generation or storage service."
+      },
+      {
+        "endpoint": "GET /api/reports/today",
+        "issue": "Returns report_json but report_pdf is None/empty",
+        "impact": "PDF reports not being generated or stored",
+        "fix_priority": "HIGH",
+        "details": "Report JSON is generated correctly but PDF URI is missing. Storage provider is 'local' but PDF not being persisted."
+      },
+      {
+        "endpoint": "GET /api/businesses (Subscriber role)",
+        "issue": "Returns 500 Internal Server Error for Subscriber role",
+        "impact": "Subscribers cannot view businesses list",
+        "fix_priority": "MEDIUM",
+        "details": "Works for Admin/Analyst but fails for Subscriber. Possible issue with query complexity or schema serialization for Subscriber role."
+      },
+      {
+        "endpoint": "GET /api/dashboard (Subscriber role)",
+        "issue": "Returns 500 Internal Server Error for Subscriber role",
+        "impact": "Subscribers cannot view dashboard",
+        "fix_priority": "MEDIUM",
+        "details": "Works for Admin/Analyst but fails for Subscriber. Similar to businesses endpoint issue."
+      }
+    ],
+    "passed_tests": [
+      "Alembic migration: All 15 tables exist, alembic_version at head '0001_initial_schema'",
+      "Alembic: create_all() not used in production code (only in poc_core.py and migration file)",
+      "Alembic: Database accessible via /api/healthz",
+      "Rate Limit: Burst limit triggered (5 calls/10s) with 429 response",
+      "Rate Limit: 429 includes Retry-After header",
+      "Rate Limit: Successful login after burst window clears counter",
+      "Idempotency: First discovery run succeeds",
+      "Idempotency: Second request with same key returns cached result (no new inserts)",
+      "Idempotency: Same key with different payload returns 409 Conflict",
+      "Scheduler: PATCH schedule_cron succeeds and updates DB",
+      "Scheduler: Invalid cron accepted but scheduler skips it (logs warning)",
+      "Health: GET /api/discovery/health returns correct structure (totals, queue, sources)",
+      "Health: Source-level health has rolling_24h stats with all expected keys",
+      "Health: Alert levels are green/amber/red",
+      "Health: Run count increases after discovery run",
+      "Health: last_success_at populated after successful run",
+      "RBAC: Admin can PATCH /api/discovery/sources/{id}",
+      "RBAC: Admin can POST /api/discovery/queue/process",
+      "RBAC: Analyst can POST /api/discovery/run",
+      "RBAC: Analyst can POST /api/discovery/sources/{id}/run",
+      "RBAC: Analyst CANNOT PATCH /api/discovery/sources (403 correct)",
+      "RBAC: Subscriber can GET /api/reports",
+      "RBAC: Subscriber CANNOT POST /api/discovery/run (403 correct)",
+      "RBAC: Subscriber CANNOT PATCH /api/discovery/sources (403 correct)",
+      "RBAC: Subscriber CANNOT POST /api/reports/generate (403 correct)",
+      "RBAC: Unauthenticated GET /api/businesses returns 401",
+      "RBAC: Public endpoints /api/ and /api/healthz accessible without auth"
+    ]
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": [
+    "Alembic Migration State: 15 tables exist, version at head",
+    "Rate Limiting: Burst and sustained limits working with 429 + Retry-After",
+    "Idempotency: Cached responses and 409 conflict detection working",
+    "Scheduler: Dynamic schedule registration and updates working",
+    "Health Monitoring: Rolling 24h stats with alert levels working",
+    "RBAC: Most role-based permissions working correctly"
+  ],
+  
+  "test_report_links": ["/app/backend/backend_test.py"],
+  
+  "success_percentage": {
+    "backend": "84.1% (37/44 tests passed)",
+    "frontend": "N/A (frontend testing skipped as requested)"
+  },
+  
+  "updated_files": [
+    "/app/backend/backend_test.py"
+  ],
+  
+  "action_item_for_main_agent": {
+    "priority_1_critical": [
+      "Fix POST /api/reports/generate 500 error - investigate PDF generation and storage service",
+      "Fix GET /api/reports/today to properly generate and store PDF (report_pdf is None)",
+      "Debug why report PDF generation is failing - check reportlab library and storage_service.py"
+    ],
+    "priority_2_high": [
+      "Fix GET /api/businesses 500 error for Subscriber role - works for Admin/Analyst",
+      "Fix GET /api/dashboard 500 error for Subscriber role - works for Admin/Analyst",
+      "Add proper error logging to see actual exceptions (currently caught by global handler)"
+    ],
+    "verification_needed": [
+      "Verify Alembic migration logs show 'Alembic: upgrade head completed' on startup (confirmed in backend.err.log)",
+      "Verify scheduler logs show 'registered discovery schedule: synthetic @ 0 6 * * * IST' (confirmed)",
+      "Test report generation end-to-end after fixing PDF issues"
+    ]
+  },
+  
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_test_itself": false
+}

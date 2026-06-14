@@ -1,58 +1,22 @@
 [
   {
-    "content": "Security: Fix JWT secret (generate strong, fail-fast in prod, document rotation)",
+    "content": "Inspect current state of all 7 modules (Alembic, rate limit, idempotency, scheduler, health, reports, RBAC)",
+    "status": "completed"
+  },
+  {
+    "content": "Verify Alembic migration state via direct DB check",
+    "status": "completed"
+  },
+  {
+    "content": "Run focused backend testing via testing_agent on all 7 areas",
     "status": "in_progress"
   },
   {
-    "content": "Security: Restrict CORS (env-driven, refuse * in prod)",
+    "content": "Fix any bugs surfaced by the testing agent",
     "status": "pending"
   },
   {
-    "content": "Security: Gate test users by APP_ENV (no QA users in production)",
-    "status": "pending"
-  },
-  {
-    "content": "Security: Add login rate limiting (sliding window per IP)",
-    "status": "pending"
-  },
-  {
-    "content": "Reports: Pluggable storage_service (LocalDisk + S3-compatible: R2/MinIO/S3)",
-    "status": "pending"
-  },
-  {
-    "content": "Database: Alembic migrations (drop create_all, initial baseline, startup upgrade)",
-    "status": "pending"
-  },
-  {
-    "content": "Database: Backup strategy (pg_dump script + runbook + retention)",
-    "status": "pending"
-  },
-  {
-    "content": "Database: Move DB outside app pod (env-driven, retry, document managed-DB migration)",
-    "status": "pending"
-  },
-  {
-    "content": "Discovery: Register schedule_cron with APScheduler (startup + on-PATCH)",
-    "status": "pending"
-  },
-  {
-    "content": "Discovery: Retry mechanism with exponential backoff (providers + LLM)",
-    "status": "pending"
-  },
-  {
-    "content": "Discovery: Lineage tracking (source_run_id FK on businesses)",
-    "status": "pending"
-  },
-  {
-    "content": "Discovery: Idempotency keys (Idempotency-Key header on run endpoints)",
-    "status": "pending"
-  },
-  {
-    "content": "Discovery: Source health monitoring (rolling error rate + alert flag)",
-    "status": "pending"
-  },
-  {
-    "content": "Test end-to-end with testing_agent_v3",
+    "content": "Update plan.md with verification results",
     "status": "pending"
   }
 ]
