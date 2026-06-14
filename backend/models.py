@@ -22,8 +22,8 @@ class User(Base):
     oauth_provider = Column(String(40), nullable=True)
     oauth_provider_id = Column(String(200), nullable=True)
     avatar_url = Column(String(500), nullable=True)
-    role = Column(String(20), nullable=False, default="Subscriber")  # Admin / Analyst / Subscriber
-    status = Column(String(20), nullable=False, default="Active")  # Active / Inactive
+    role = Column(String(20), nullable=False, default="Subscriber")
+    status = Column(String(20), nullable=False, default="Active")
     force_password_reset = Column(Boolean, default=False, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -34,18 +34,20 @@ class Business(Base):
     __tablename__ = "businesses"
     id = Column(String, primary_key=True, default=gen_uuid)
     business_name = Column(String(255), nullable=False, index=True)
+    gst_number = Column(String(20), nullable=True, index=True)
     registration_date = Column(Date, nullable=True, index=True)
     company_type = Column(String(80))
+    industry = Column(String(80), index=True)
     category = Column(String(120), index=True)
     sub_category = Column(String(120))
-    website = Column(String(255))
+    website = Column(String(255), index=True)
     phone = Column(String(40), index=True)
     email = Column(String(160), index=True)
     linkedin_url = Column(String(300))
     director_name = Column(String(200))
     employee_estimate = Column(Integer)
     address = Column(Text)
-    locality = Column(String(120))
+    locality = Column(String(120), index=True)
     city = Column(String(80), index=True)
     district = Column(String(80))
     state = Column(String(80), index=True)
@@ -56,7 +58,7 @@ class Business(Base):
     source = Column(String(80), index=True)
     source_url = Column(String(500))
     confidence_score = Column(Float, default=0.5)
-    enrichment_status = Column(String(20), default="pending")  # pending / enriched / failed
+    enrichment_status = Column(String(20), default="pending", index=True)  # pending / queued / enriched / failed
     extra = Column(JSONB, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -66,6 +68,7 @@ class Business(Base):
 
 
 Index("ix_businesses_name_pincode", Business.business_name, Business.pincode)
+Index("ix_businesses_industry_city", Business.industry, Business.city)
 
 
 class Prediction(Base):
@@ -152,5 +155,57 @@ class SchedulerJobRun(Base):
     job_name = Column(String(80), nullable=False, index=True)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     finished_at = Column(DateTime, nullable=True)
-    status = Column(String(30), default="running")  # running / success / failed
+    status = Column(String(30), default="running")
     message = Column(Text, nullable=True)
+
+
+class DiscoverySource(Base):
+    __tablename__ = "discovery_sources"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    name = Column(String(80), nullable=False, unique=True, index=True)
+    display_name = Column(String(120), nullable=False)
+    description = Column(Text)
+    enabled = Column(Boolean, default=True, nullable=False)
+    requires_config = Column(JSONB, default=list)
+    schedule_cron = Column(String(40), nullable=True)  # e.g. "0 6 * * *"
+    config = Column(JSONB, default=dict)
+    last_run_at = Column(DateTime, nullable=True)
+    last_run_status = Column(String(30), nullable=True)
+    last_run_summary = Column(JSONB, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    runs = relationship("DiscoverySourceRun", back_populates="source", cascade="all, delete-orphan")
+
+
+class DiscoverySourceRun(Base):
+    __tablename__ = "discovery_source_runs"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    source_id = Column(String, ForeignKey("discovery_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_name = Column(String(80), index=True)
+    triggered_by = Column(String(160), nullable=True)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    finished_at = Column(DateTime, nullable=True)
+    status = Column(String(30), default="running")  # running / success / failed
+    records_found = Column(Integer, default=0)
+    records_added = Column(Integer, default=0)
+    duplicates_removed = Column(Integer, default=0)
+    invalid_records = Column(Integer, default=0)
+    errors_count = Column(Integer, default=0)
+    enrichment_queued = Column(Integer, default=0)
+    errors = Column(JSONB, default=list)
+    message = Column(Text, nullable=True)
+
+    source = relationship("DiscoverySource", back_populates="runs")
+
+
+class EnrichmentQueueItem(Base):
+    __tablename__ = "enrichment_queue"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    business_id = Column(String, ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False, index=True, unique=True)
+    status = Column(String(20), default="queued", nullable=False, index=True)  # queued / processing / done / failed
+    attempts = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+    queued_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)

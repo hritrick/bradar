@@ -49,8 +49,10 @@ class UserOut(BaseModel):
 
 class BusinessBase(BaseModel):
     business_name: str
+    gst_number: Optional[str] = None
     registration_date: Optional[date] = None
     company_type: Optional[str] = None
+    industry: Optional[str] = None
     category: Optional[str] = None
     sub_category: Optional[str] = None
     website: Optional[str] = None
@@ -78,7 +80,9 @@ class BusinessCreate(BusinessBase):
 
 class BusinessUpdate(BaseModel):
     business_name: Optional[str] = None
+    gst_number: Optional[str] = None
     company_type: Optional[str] = None
+    industry: Optional[str] = None
     category: Optional[str] = None
     sub_category: Optional[str] = None
     website: Optional[str] = None
@@ -129,8 +133,10 @@ class BusinessListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     business_name: str
+    gst_number: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
+    industry: Optional[str] = None
     category: Optional[str] = None
     sub_category: Optional[str] = None
     registration_date: Optional[date] = None
@@ -158,6 +164,7 @@ class FilterParams(BaseModel):
     search: Optional[str] = None
     city: Optional[List[str]] = None
     state: Optional[List[str]] = None
+    industry: Optional[List[str]] = None
     category: Optional[List[str]] = None
     pincode: Optional[str] = None
     predicted_need: Optional[List[str]] = None
@@ -169,7 +176,7 @@ class FilterParams(BaseModel):
     source: Optional[List[str]] = None
     page: int = 1
     page_size: int = 25
-    sort: Optional[str] = "created_at"  # field name optionally prefixed by '-' for desc
+    sort: Optional[str] = "created_at"
 
 
 class SettingItem(BaseModel):
@@ -234,7 +241,7 @@ class UserPreferenceUpdate(BaseModel):
 
 
 class DiscoveryRunRequest(BaseModel):
-    source: str  # opencorporates / mca / sample
+    source: str
     limit: int = 10
     query: Optional[Dict[str, Any]] = None
 

@@ -8,11 +8,14 @@ import { PageHeader } from '../components/radar/Common';
 import { TIDS } from '../constants/testIds';
 
 const INITIAL = {
-    business_name: '', registration_date: '', company_type: 'Private Limited', category: '', sub_category: '',
+    business_name: '', gst_number: '', registration_date: '', company_type: 'Private Limited',
+    industry: '', category: '', sub_category: '',
     website: '', phone: '', email: '', linkedin_url: '', director_name: '', employee_estimate: '',
     address: '', locality: '', city: '', district: '', state: '', country: 'India', pincode: '',
     source: 'manual',
 };
+
+const INDUSTRIES = ['Real Estate', 'Manufacturing', 'Logistics', 'Retail', 'IT Services', 'Healthcare'];
 
 export default function NewBusiness() {
     const [form, setForm] = useState(INITIAL);
@@ -49,10 +52,17 @@ export default function NewBusiness() {
                     <div className="eyebrow mb-4">Basics</div>
                     <div className="grid sm:grid-cols-2 gap-4">
                         <Field label="Business name *"><input data-testid={TIDS.bizNewName} className="field-input" value={form.business_name} onChange={(e) => update('business_name', e.target.value)} /></Field>
+                        <Field label="GST number"><input className="field-input mono" value={form.gst_number} onChange={(e) => update('gst_number', e.target.value.toUpperCase())} placeholder="27AABCT1234A1ZX" maxLength={15} /></Field>
                         <Field label="Registration date"><input type="date" className="field-input" value={form.registration_date} onChange={(e) => update('registration_date', e.target.value)} /></Field>
                         <Field label="Company type">
                             <select className="field-input" value={form.company_type} onChange={(e) => update('company_type', e.target.value)}>
                                 {['Private Limited', 'LLP', 'Partnership', 'Sole Proprietorship', 'Public Limited', 'OPC'].map(t => <option key={t}>{t}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Industry">
+                            <select className="field-input" value={form.industry} onChange={(e) => update('industry', e.target.value)}>
+                                <option value="">— select —</option>
+                                {INDUSTRIES.map(t => <option key={t}>{t}</option>)}
                             </select>
                         </Field>
                         <Field label="Category"><input className="field-input" value={form.category} onChange={(e) => update('category', e.target.value)} placeholder="e.g. Technology" /></Field>

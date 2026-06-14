@@ -92,7 +92,9 @@ export default function BusinessDetail() {
                             <div className="eyebrow">Profile</div>
                             <div className="heading text-lg mt-1">{b.business_name}</div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 text-sm">
+                                <Field icon={Briefcase} label="GST Number" value={b.gst_number} mono />
                                 <Field icon={Briefcase} label="Company Type" value={b.company_type} />
+                                <Field icon={Building2} label="Industry" value={b.industry} />
                                 <Field icon={Building2} label="Category" value={b.category} />
                                 <Field icon={Building2} label="Sub-category" value={b.sub_category} />
                                 <Field icon={Phone} label="Phone" value={b.phone} />

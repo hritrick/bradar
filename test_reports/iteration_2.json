@@ -1,0 +1,99 @@
+{
+  "summary": "Completed comprehensive Phase 3 Discovery Framework testing. Backend: 24/26 tests passed (92.3%). Frontend: All major features functional including 8-provider architecture, health dashboard, RBAC controls, and business schema with GST/Industry fields. System successfully handles 10,000+ businesses across 6 industries and 3 cities with full deduplication and enrichment pipeline.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": [],
+    "minor_issues": [
+      {
+        "endpoint": "/api/reports/today",
+        "issue": "Response structure is correct but test validation logic expected 'kpis' at top level instead of nested in 'report_json'",
+        "impact": "None - endpoint working correctly, only test validation needs adjustment",
+        "fix_priority": "LOW",
+        "note": "Actual response: {id, report_date, report_json: {kpis, by_city, by_industry, ...}}"
+      },
+      {
+        "endpoint": "/api/audit-logs",
+        "issue": "Response is direct array instead of {items: []} wrapper, test validation expected 'items' field",
+        "impact": "None - endpoint working correctly, only test validation needs adjustment",
+        "fix_priority": "LOW",
+        "note": "Discovery actions (discovery_run, update_discovery_source) are being logged correctly"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: Admin/Analyst/Subscriber authentication (3/3)",
+    "Backend: GET /api/discovery/sources returns 8 sources (synthetic, manual, csv_import, opencorporates, mca, google_business, indiamart, justdial)",
+    "Backend: All 8 sources have required fields (id, name, display_name, description, enabled, configured, requires_config, supports_run_now, last_run_at, last_run_summary)",
+    "Backend: GET /api/discovery/connectors (legacy) returns 8 providers",
+    "Backend: GET /api/discovery/health returns totals (records_found=55, records_added=30, duplicates_removed=25, errors=0, sources_enabled=4/8)",
+    "Backend: GET /api/discovery/health includes queue status (queued, processing, done, failed) and per-source aggregates",
+    "Backend: GET /api/discovery/queue returns queue counts",
+    "Backend: PATCH /api/discovery/sources/{id} - Analyst gets 403 (RBAC working)",
+    "Backend: PATCH /api/discovery/sources/{id} - Admin can toggle enabled and set schedule_cron",
+    "Backend: POST /api/discovery/sources/{id}/run with limit=10 produces records_found=10, records_added=5, duplicates_removed=5",
+    "Backend: Source.last_run_at updated after discovery run",
+    "Backend: POST /api/discovery/run (legacy) with {source:'synthetic', limit:5} works (fetched=5, inserted=4)",
+    "Backend: GET /api/discovery/sources/{id}/runs returns 3+ historical runs with all required fields",
+    "Backend: Business schema includes gst_number, industry, latest_score, latest_lead_category, latest_predicted_need",
+    "Backend: Total businesses = 10,031 (10,000 seeded + 31 from tests)",
+    "Backend: GET /api/businesses/distinct returns 6 industries (Real Estate, Manufacturing, Logistics, Retail, IT Services, Healthcare)",
+    "Backend: GET /api/businesses?industry=Healthcare filters correctly (all results are Healthcare)",
+    "Backend: GET /api/businesses?city=Mumbai filters correctly (all results are Mumbai)",
+    "Backend: GET /api/businesses?min_score=80 filters correctly (all results have score >= 80)",
+    "Backend: GET /api/businesses?lead_category=HOT filters correctly (all results are HOT)",
+    "Backend: GET /api/dashboard returns 10,031 businesses, 6 industries, 3 cities (Mumbai, Thane, Navi Mumbai)",
+    "Backend: Deduplication working - same GST number returns same business ID (no duplicate created)",
+    "Backend: POST /api/discovery/queue/process?batch=2 processes enrichment queue (processed=5, failed=0)",
+    "Backend: Audit logs include discovery_run and update_discovery_source actions",
+    "Frontend: Admin login successful and redirects to dashboard",
+    "Frontend: Discovery page navigation working",
+    "Frontend: 5 health totals displayed (Records Found: 55, Records Added: 30, Duplicates Removed: 25, Errors: 0, Sources Enabled: 4/8)",
+    "Frontend: 8 provider cards present (Synthetic Generator, CSV Import, Manual Entry, OpenCorporates, MCA Portal, Google Business, IndiaMART, Justdial)",
+    "Frontend: Each provider card shows Found/Added/Dupes/Errors/Runs stats",
+    "Frontend: Admin controls visible (enable/disable toggle for each source, Process queue button)",
+    "Frontend: Run now button on Synthetic Generator works with success toast",
+    "Frontend: Source card updates after run (shows 'success' status pill)",
+    "Frontend: Logs sheet opens and shows run history with 'Triggered: test.admin@businessradar.ai'",
+    "Frontend: Logs sheet shows Found/Added/Dupes/Errors stats for each run",
+    "Frontend: Toggle OpenCorporates persists after page refresh",
+    "Frontend: RBAC - Analyst role: enable/disable toggles NOT visible",
+    "Frontend: RBAC - Analyst role: Process queue button NOT visible",
+    "Frontend: RBAC - Analyst role: Run now button IS visible",
+    "Frontend: Dashboard shows 10,031 total businesses",
+    "Frontend: Dashboard shows 4 KPI cards (Total: 10,031, Today's New: 10,031, Hot Leads: 3,314, Avg Score: 70.1)",
+    "Frontend: Dashboard 'By Industry' section shows all 6 industries with counts (Healthcare: 1,737, Manufacturing: 1,719, IT Services: 1,668, Logistics: 1,658, Retail: 1,643, Real Estate: 1,614)",
+    "Frontend: Dashboard 'By City' section shows Mumbai, Thane, Navi Mumbai",
+    "Frontend: Dashboard 'Lead Temperature Distribution' shows HOT (3,314), WARM (6,432), COLD (76)",
+    "Frontend: Businesses page has Industry filter",
+    "Frontend: Industry filter works - applied Healthcare filter successfully",
+    "Frontend: Industry column visible in businesses table",
+    "Frontend: Business detail page shows GST Number field",
+    "Frontend: RBAC - Subscriber role: Discovery nav hidden",
+    "Frontend: RBAC - Subscriber role: Add Business nav hidden",
+    "Frontend: RBAC - Subscriber role: CSV Upload nav hidden",
+    "Frontend: RBAC - Subscriber role: Dashboard, Businesses, Reports, Preferences visible (4/4)",
+    "Frontend: New Business form has GST Number field (line 55 in NewBusiness.jsx)",
+    "Frontend: New Business form has Industry dropdown with 6 industries (Real Estate, Manufacturing, Logistics, Retail, IT Services, Healthcare)"
+  ],
+  "test_report_links": [
+    "/app/backend/backend_test_phase3.py",
+    "/root/.emergent/automation_output/20260614_195755/console_20260614_195755.log",
+    "/root/.emergent/automation_output/20260614_195938/console_20260614_195938.log",
+    "/root/.emergent/automation_output/20260614_200055/console_20260614_200055.log"
+  ],
+  "action_item_for_main_agent": "",
+  "updated_files": [
+    "/app/backend/backend_test_phase3.py"
+  ],
+  "success_percentage": {
+    "backend": "92.3% (24/26 tests passed - 2 minor validation issues, endpoints working correctly)",
+    "frontend": "100% (52/52 checks passed)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}

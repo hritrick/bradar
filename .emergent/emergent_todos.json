@@ -1,42 +1,38 @@
 [
   {
-    "content": "Phase 1: Install & configure PostgreSQL in container, set DATABASE_URL",
+    "content": "Phase 3: Backend - extend schema (gst_number, industry, discovery_sources, discovery_source_runs, enrichment_queue)",
     "status": "completed"
   },
   {
-    "content": "Phase 1: Get Emergent LLM Key + integration playbook",
+    "content": "Phase 3: Backend - formalize BusinessDiscoveryProvider interface + 7 providers",
     "status": "completed"
   },
   {
-    "content": "Phase 1: Create POC script (Postgres + LLM enrich/predict/score + PDF + Excel)",
+    "content": "Phase 3: Backend - pipeline v2 (dedup by GST/website/phone/name+pincode), geo intelligence step, enrichment queue",
     "status": "completed"
   },
   {
-    "content": "Phase 1: Run POC script until fully green",
+    "content": "Phase 3: Backend - admin controls + health dashboard endpoints",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Design guidelines via design_agent (CRED-style)",
+    "content": "Phase 3: Backend - background enrichment worker",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Backend full implementation (models, auth, pipeline, reports, scheduler, audit)",
+    "content": "Phase 3: Backend - 10k synthetic seed (Mumbai/Thane/Navi Mumbai, 6 industries) without AI",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Frontend full implementation (all routes, RBAC UI, exports, mobile)",
+    "content": "Phase 3: Backend - refactor dashboard/reports aggregations to SQL (perf for 10k)",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Seed admin user (Dhananjay) + sample Mumbai businesses",
+    "content": "Phase 3: Frontend - new Discovery page (health + provider cards + admin controls + logs)",
     "status": "completed"
   },
   {
-    "content": "Phase 2: All user stories covered in development",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 2: End-to-End testing with testing_agent_v3 + fix all bugs",
-    "status": "completed"
+    "content": "Phase 3: Test end-to-end with testing_agent_v3",
+    "status": "in_progress"
   }
 ]

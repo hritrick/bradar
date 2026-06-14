@@ -48,7 +48,7 @@ export default function Dashboard() {
         );
     }
 
-    const { kpis, seven_days, by_city, by_category, by_predicted_need, recent } = data;
+    const { kpis, seven_days, by_city, by_industry, by_category, by_predicted_need, by_pincode, recent } = data;
 
     return (
         <div>
@@ -138,27 +138,40 @@ export default function Dashboard() {
                     </div>
                 </div>
                 <div className="surface p-5">
-                    <div className="eyebrow">By Category</div>
+                    <div className="eyebrow">By Industry</div>
                     <div className="heading text-lg mt-1">Top sectors</div>
                     <div className="mt-4 space-y-3">
-                        {by_category.length === 0 && <div className="text-sm text-muted-foreground">No data yet</div>}
-                        {by_category.map((c) => (
-                            <div key={c.category} className="flex items-center justify-between text-sm">
-                                <span className="truncate">{c.category}</span>
-                                <span className="mono text-muted-foreground">{c.count}</span>
+                        {(by_industry || []).length === 0 && <div className="text-sm text-muted-foreground">No data yet</div>}
+                        {(by_industry || []).map((c) => (
+                            <div key={c.industry} className="flex items-center justify-between text-sm">
+                                <span className="truncate">{c.industry}</span>
+                                <span className="mono text-muted-foreground">{c.count.toLocaleString('en-IN')}</span>
                             </div>
                         ))}
                     </div>
                 </div>
                 <div className="surface p-5">
                     <div className="eyebrow">Predicted Needs</div>
-                    <div className="heading text-lg mt-1">What they’ll buy</div>
+                    <div className="heading text-lg mt-1">What they'll buy</div>
                     <div className="mt-4 space-y-3">
                         {by_predicted_need.length === 0 && <div className="text-sm text-muted-foreground">No data yet</div>}
                         {by_predicted_need.map((c) => (
                             <div key={c.need} className="flex items-center justify-between text-sm">
                                 <span className="truncate">{c.need}</span>
-                                <span className="mono text-muted-foreground">{c.count}</span>
+                                <span className="mono text-muted-foreground">{c.count.toLocaleString('en-IN')}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="surface p-5">
+                    <div className="eyebrow">Top Pincodes</div>
+                    <div className="heading text-lg mt-1">Geo hotspots</div>
+                    <div className="mt-4 space-y-3">
+                        {(by_pincode || []).length === 0 && <div className="text-sm text-muted-foreground">No data yet</div>}
+                        {(by_pincode || []).slice(0, 8).map((c) => (
+                            <div key={c.pincode} className="flex items-center justify-between text-sm">
+                                <span className="mono">{c.pincode}</span>
+                                <span className="mono text-muted-foreground">{c.count.toLocaleString('en-IN')}</span>
                             </div>
                         ))}
                     </div>
@@ -182,7 +195,7 @@ export default function Dashboard() {
                                 <tr>
                                     <th>Business</th>
                                     <th>City</th>
-                                    <th>Category</th>
+                                    <th>Industry</th>
                                     <th>Added</th>
                                     <th>Lead</th>
                                 </tr>
@@ -192,7 +205,7 @@ export default function Dashboard() {
                                     <tr key={b.id}>
                                         <td className="font-medium"><Link to={`/businesses/${b.id}`} className="hover:text-[hsl(var(--primary))]">{b.business_name}</Link></td>
                                         <td>{b.city || '—'}</td>
-                                        <td>{b.category || '—'}</td>
+                                        <td>{b.industry || b.category || '—'}</td>
                                         <td className="mono text-muted-foreground">{fmtDate(b.created_at)}</td>
                                         <td><StatusPill category={b.lead_category} score={b.score} /></td>
                                     </tr>

@@ -16,8 +16,9 @@ from routers import (
     auth_router, users_router, businesses_router, discovery_router,
     reports_router, admin_router, preferences_router, dashboard_router,
 )
-import models  # ensure models are registered
+import models
 from scheduler import start_scheduler, stop_scheduler
+import enrichment_worker
 import seed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -26,24 +27,26 @@ log = logging.getLogger("business_radar")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables (idempotent for MVP)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Seed admin + sample data
     try:
         await seed.run_seed()
     except Exception as e:
         log.warning(f"Seed failed (non-fatal): {e}")
-    # Start scheduler
     try:
         await start_scheduler()
     except Exception as e:
         log.warning(f"Scheduler start failed: {e}")
+    try:
+        await enrichment_worker.start_worker()
+    except Exception as e:
+        log.warning(f"Worker start failed: {e}")
     yield
     await stop_scheduler()
+    await enrichment_worker.stop_worker()
 
 
-app = FastAPI(title="Business Radar AI", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Business Radar AI", version="1.1.0", lifespan=lifespan)
 
 
 @app.exception_handler(Exception)

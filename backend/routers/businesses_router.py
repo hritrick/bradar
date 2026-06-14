@@ -3,7 +3,7 @@ import csv
 import io
 from datetime import date
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func, or_, and_, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/businesses", tags=["businesses"])
 ANALYST_OR_ADMIN = require_roles(["Admin", "Analyst"])
 
 
-def _apply_filters(stmt, *, search, city, state, category, pincode, source,
+def _apply_filters(stmt, *, search, city, state, industry, category, pincode, source,
                    registered_after, registered_before):
     if search:
         like = f"%{search.lower()}%"
@@ -31,11 +31,14 @@ def _apply_filters(stmt, *, search, city, state, category, pincode, source,
             func.lower(Business.director_name).like(like),
             func.lower(Business.email).like(like),
             func.lower(Business.phone).like(like),
+            func.lower(Business.gst_number).like(like),
         ))
     if city:
         stmt = stmt.where(Business.city.in_(city))
     if state:
         stmt = stmt.where(Business.state.in_(state))
+    if industry:
+        stmt = stmt.where(Business.industry.in_(industry))
     if category:
         stmt = stmt.where(Business.category.in_(category))
     if pincode:
@@ -56,6 +59,7 @@ async def list_businesses(
     search: Optional[str] = None,
     city: Optional[List[str]] = Query(None),
     state: Optional[List[str]] = Query(None),
+    industry: Optional[List[str]] = Query(None),
     category: Optional[List[str]] = Query(None),
     pincode: Optional[str] = None,
     source: Optional[List[str]] = Query(None),
@@ -71,78 +75,88 @@ async def list_businesses(
 ):
     page = max(1, page)
     page_size = max(1, min(100, page_size))
-    base = select(Business)
-    base = _apply_filters(base, search=search, city=city, state=state, category=category,
+
+    # Latest score subquery
+    latest_q = (
+        select(LeadScore.business_id, func.max(LeadScore.created_at).label("mx"))
+        .group_by(LeadScore.business_id)
+        .subquery()
+    )
+    latest_ls = (
+        select(LeadScore.business_id, LeadScore.score, LeadScore.lead_category)
+        .join(latest_q, and_(LeadScore.business_id == latest_q.c.business_id, LeadScore.created_at == latest_q.c.mx))
+    ).subquery()
+    latest_pq = (
+        select(Prediction.business_id, func.max(Prediction.created_at).label("mx"))
+        .group_by(Prediction.business_id)
+        .subquery()
+    )
+    latest_pred = (
+        select(Prediction.business_id, Prediction.predicted_need)
+        .join(latest_pq, and_(Prediction.business_id == latest_pq.c.business_id, Prediction.created_at == latest_pq.c.mx))
+    ).subquery()
+
+    base = select(
+        Business,
+        latest_ls.c.score,
+        latest_ls.c.lead_category,
+        latest_pred.c.predicted_need,
+    ).outerjoin(latest_ls, latest_ls.c.business_id == Business.id) \
+     .outerjoin(latest_pred, latest_pred.c.business_id == Business.id)
+
+    base = _apply_filters(base, search=search, city=city, state=state, industry=industry, category=category,
                           pincode=pincode, source=source,
                           registered_after=registered_after, registered_before=registered_before)
+    if min_score is not None:
+        base = base.where(latest_ls.c.score >= min_score)
+    if max_score is not None:
+        base = base.where(latest_ls.c.score <= max_score)
+    if lead_category:
+        base = base.where(latest_ls.c.lead_category.in_(lead_category))
+    if predicted_need:
+        base = base.where(latest_pred.c.predicted_need.in_(predicted_need))
 
-    # Sort
     sort_col_name = sort.lstrip("-")
     sort_col = getattr(Business, sort_col_name, Business.created_at)
     sort_fn = desc if sort.startswith("-") else asc
     base = base.order_by(sort_fn(sort_col))
 
-    # Count
+    # Count via subquery on the filtered query
     count_stmt = select(func.count()).select_from(base.order_by(None).subquery())
     total = (await db.execute(count_stmt)).scalar() or 0
 
-    # Paginate
     offset = (page - 1) * page_size
     res = await db.execute(base.offset(offset).limit(page_size))
-    rows = res.scalars().all()
-    biz_ids = [b.id for b in rows]
 
-    latest_score = {}
-    latest_pred = {}
-    if biz_ids:
-        ls_res = await db.execute(select(LeadScore).where(LeadScore.business_id.in_(biz_ids)))
-        for ls in ls_res.scalars():
-            cur = latest_score.get(ls.business_id)
-            if not cur or (ls.created_at and (not cur.created_at or ls.created_at > cur.created_at)):
-                latest_score[ls.business_id] = ls
-        pr_res = await db.execute(select(Prediction).where(Prediction.business_id.in_(biz_ids)))
-        for pr in pr_res.scalars():
-            cur = latest_pred.get(pr.business_id)
-            if not cur or (pr.created_at and (not cur.created_at or pr.created_at > cur.created_at)):
-                latest_pred[pr.business_id] = pr
-
-    # Optional post-filter for score/lead/predicted_need
     items = []
-    for b in rows:
-        ls = latest_score.get(b.id)
-        pr = latest_pred.get(b.id)
-        if min_score is not None and (ls is None or (ls.score or 0) < min_score):
-            continue
-        if max_score is not None and (ls is None or (ls.score or 0) > max_score):
-            continue
-        if lead_category and (ls is None or ls.lead_category not in lead_category):
-            continue
-        if predicted_need and (pr is None or pr.predicted_need not in predicted_need):
-            continue
+    for row in res.all():
+        b: Business = row[0]
+        score, lead_cat, pred_need = row[1], row[2], row[3]
         items.append(BusinessListItem(
-            id=b.id, business_name=b.business_name, city=b.city, state=b.state,
-            category=b.category, sub_category=b.sub_category, registration_date=b.registration_date,
-            pincode=b.pincode, director_name=b.director_name, phone=b.phone, email=b.email,
+            id=b.id, business_name=b.business_name, gst_number=b.gst_number, city=b.city, state=b.state,
+            industry=b.industry, category=b.category, sub_category=b.sub_category,
+            registration_date=b.registration_date, pincode=b.pincode,
+            director_name=b.director_name, phone=b.phone, email=b.email,
             source=b.source, enrichment_status=b.enrichment_status,
             confidence_score=b.confidence_score,
-            latest_score=ls.score if ls else None,
-            latest_lead_category=ls.lead_category if ls else None,
-            latest_predicted_need=pr.predicted_need if pr else None,
+            latest_score=score, latest_lead_category=lead_cat, latest_predicted_need=pred_need,
             created_at=b.created_at,
         ))
-    return BusinessListResponse(total=total, page=page, page_size=page_size, items=items)
+    return BusinessListResponse(total=int(total), page=page, page_size=page_size, items=items)
 
 
 @router.get("/distinct")
 async def get_distinct_values(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     cities = [r[0] for r in (await db.execute(select(Business.city).where(Business.city.isnot(None)).distinct())).all()]
     states = [r[0] for r in (await db.execute(select(Business.state).where(Business.state.isnot(None)).distinct())).all()]
+    industries = [r[0] for r in (await db.execute(select(Business.industry).where(Business.industry.isnot(None)).distinct())).all()]
     categories = [r[0] for r in (await db.execute(select(Business.category).where(Business.category.isnot(None)).distinct())).all()]
     sources = [r[0] for r in (await db.execute(select(Business.source).where(Business.source.isnot(None)).distinct())).all()]
     preds = [r[0] for r in (await db.execute(select(Prediction.predicted_need).where(Prediction.predicted_need.isnot(None)).distinct())).all()]
     return {
         "cities": sorted(filter(None, cities)),
         "states": sorted(filter(None, states)),
+        "industries": sorted(filter(None, industries)),
         "categories": sorted(filter(None, categories)),
         "sources": sorted(filter(None, sources)),
         "predicted_needs": sorted(filter(None, preds)),
@@ -163,16 +177,17 @@ async def get_business(business_id: str, db: AsyncSession = Depends(get_db), _: 
 
 
 @router.post("", response_model=BusinessOut, status_code=201)
-async def create_business(body: BusinessCreate, request: Request, background: BackgroundTasks,
+async def create_business(body: BusinessCreate, request: Request,
                            db: AsyncSession = Depends(get_db), me: User = Depends(ANALYST_OR_ADMIN)):
     payload = body.model_dump()
     payload["source"] = payload.get("source") or "manual"
     biz, created = await ingest_business(db, payload, run_ai=True)
-    await write_audit(db, user_id=me.id, user_email=me.email, action="create_business" if created else "update_business",
-                      entity_type="business", entity_id=biz.id, after_value={"business_name": biz.business_name, "city": biz.city},
+    await write_audit(db, user_id=me.id, user_email=me.email,
+                      action="create_business" if created else "update_business",
+                      entity_type="business", entity_id=biz.id,
+                      after_value={"business_name": biz.business_name, "city": biz.city, "industry": biz.industry},
                       ip_address=request.client.host if request.client else None,
                       user_agent=request.headers.get("user-agent"))
-    # reload with relationships
     res = await db.execute(select(Business).options(selectinload(Business.predictions), selectinload(Business.lead_scores)).where(Business.id == biz.id))
     return BusinessOut.model_validate(res.scalar_one())
 
@@ -219,18 +234,14 @@ async def rerun_ai(business_id: str, request: Request, db: AsyncSession = Depend
     b = res.scalar_one_or_none()
     if not b:
         raise HTTPException(404, "Business not found")
-    snapshot = {
-        "business_name": b.business_name,
-        "city": b.city,
-        "state": b.state,
-        "pincode": b.pincode,
-        "company_type": b.company_type,
-        "category": b.category,
-        "website": b.website,
-        "registration_date": str(b.registration_date) if b.registration_date else None,
+    payload = {
+        "business_name": b.business_name, "city": b.city, "state": b.state, "pincode": b.pincode,
+        "company_type": b.company_type, "category": b.category, "industry": b.industry,
+        "website": b.website, "phone": b.phone, "email": b.email, "gst_number": b.gst_number,
+        "registration_date": b.registration_date,
         "employee_estimate": b.employee_estimate,
     }
-    biz, _ = await ingest_business(db, snapshot | {"business_name": b.business_name, "id": b.id}, run_ai=True)
+    biz, _ = await ingest_business(db, payload, run_ai=True)
     await write_audit(db, user_id=me.id, user_email=me.email, action="rerun_ai", entity_type="business", entity_id=biz.id,
                       ip_address=request.client.host if request.client else None,
                       user_agent=request.headers.get("user-agent"))
@@ -255,8 +266,8 @@ async def upload_csv(file: UploadFile = File(...), preview: bool = True, request
         try:
             if not r.get("business_name"):
                 continue
-            r["source"] = r.get("source") or "csv_upload"
-            biz, created = await ingest_business(db, r, run_ai=False)
+            r["source"] = r.get("source") or "csv_import"
+            biz, created = await ingest_business(db, r, run_ai=False, queue_for_enrichment=True)
             if created:
                 inserted += 1
             else:

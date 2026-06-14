@@ -41,6 +41,7 @@ function FilterPanel({ filters, setFilters, onApply, onClear, distinct }) {
                 <label className="eyebrow block mb-2">Pincode</label>
                 <input data-testid={TIDS.bizFilterPincode} className="field-input" value={filters.pincode || ''} onChange={(e) => update('pincode', e.target.value)} placeholder="400001" />
             </div>
+            <MultiPick label="Industry" options={distinct.industries || []} value={filters.industry} k="industry" tid={TIDS.bizFilterIndustry} />
             <MultiPick label="City" options={distinct.cities} value={filters.city} k="city" tid={TIDS.bizFilterCity} />
             <MultiPick label="State" options={distinct.states} value={filters.state} k="state" tid={TIDS.bizFilterState} />
             <MultiPick label="Category" options={distinct.categories} value={filters.category} k="category" tid={TIDS.bizFilterCategory} />
@@ -116,6 +117,7 @@ export default function Businesses() {
         if (applied.registered_before) p.set('registered_before', applied.registered_before);
         (applied.city || []).forEach(v => p.append('city', v));
         (applied.state || []).forEach(v => p.append('state', v));
+        (applied.industry || []).forEach(v => p.append('industry', v));
         (applied.category || []).forEach(v => p.append('category', v));
         (applied.source || []).forEach(v => p.append('source', v));
         (applied.predicted_need || []).forEach(v => p.append('predicted_need', v));
@@ -218,7 +220,7 @@ export default function Businesses() {
                                         <tr>
                                             <th>Business</th>
                                             <th className="hidden sm:table-cell">City</th>
-                                            <th className="hidden md:table-cell">Category</th>
+                                            <th className="hidden md:table-cell">Industry</th>
                                             <th className="hidden lg:table-cell">Director</th>
                                             <th className="hidden lg:table-cell">Predicted Need</th>
                                             <th>Lead</th>
@@ -230,10 +232,10 @@ export default function Businesses() {
                                             <tr key={b.id} data-testid={TIDS.bizRow(b.id)}>
                                                 <td>
                                                     <Link to={`/businesses/${b.id}`} className="font-medium hover:text-[hsl(var(--primary))]">{b.business_name}</Link>
-                                                    <div className="text-xs text-muted-foreground mono mt-1">{b.pincode || ''} {b.phone || ''}</div>
+                                                    <div className="text-xs text-muted-foreground mono mt-1">{b.gst_number || ''} {b.pincode || ''}</div>
                                                 </td>
                                                 <td className="hidden sm:table-cell">{b.city || '—'}</td>
-                                                <td className="hidden md:table-cell">{b.category || '—'}</td>
+                                                <td className="hidden md:table-cell">{b.industry || b.category || '—'}</td>
                                                 <td className="hidden lg:table-cell">{b.director_name || '—'}</td>
                                                 <td className="hidden lg:table-cell text-muted-foreground">{b.latest_predicted_need || '—'}</td>
                                                 <td><StatusPill category={b.latest_lead_category} score={b.latest_score} /></td>
