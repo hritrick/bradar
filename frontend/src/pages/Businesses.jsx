@@ -7,6 +7,7 @@ import { PageHeader, Skeleton, EmptyState } from '../components/radar/Common';
 import { StatusPill } from '../components/radar/StatusPill';
 import { TIDS } from '../constants/testIds';
 import { Sheet, SheetTrigger, SheetContent } from '../components/ui/sheet';
+import { useAuth } from '../lib/AuthContext';
 
 function useDistinct() {
     const [d, setD] = useState({ cities: [], states: [], categories: [], sources: [], predicted_needs: [] });
@@ -85,6 +86,8 @@ function FilterPanel({ filters, setFilters, onApply, onClear, distinct }) {
 }
 
 export default function Businesses() {
+    const { user } = useAuth();
+    const canMutate = user?.role === 'Admin' || user?.role === 'Analyst';
     const distinct = useDistinct();
     const [filters, setFilters] = useState({});
     const [applied, setApplied] = useState({});
@@ -162,7 +165,7 @@ export default function Businesses() {
                     <>
                         <button onClick={() => exportFile('csv')} data-testid={TIDS.bizExportCsv} className="btn-secondary"><FileText className="h-4 w-4" /> CSV</button>
                         <button onClick={() => exportFile('xlsx')} data-testid={TIDS.bizExportXlsx} className="btn-secondary"><FileSpreadsheet className="h-4 w-4" /> Excel</button>
-                        <Link to="/businesses/new" className="btn-primary"><Plus className="h-4 w-4" /> Add</Link>
+                        {canMutate && <Link to="/businesses/new" className="btn-primary"><Plus className="h-4 w-4" /> Add</Link>}
                     </>
                 )}
             />

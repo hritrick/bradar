@@ -1,144 +1,212 @@
 # plan.md — Business Radar AI (SaaS MVP)
 
 ## 1) Objectives
-- Prove the fragile core end-to-end: **PostgreSQL in-container + AI structured outputs + PDF/Excel generation**.
-- Build an MVP SaaS that ingests businesses from multiple sources, runs **dedup → enrichment → prediction → scoring**, and generates **daily intelligence reports** (in-app + exports; email optional).
-- Ship a responsive dashboard with **RBAC**, audit logs, scheduler visibility, and India-first geo model (Mumbai/Thane/Navi Mumbai seed → scale).
+- **Status update:** Phase 1 (POC) and Phase 2 (Full MVP) are **completed and validated**.
+- Provide a production-grade MVP SaaS that:
+  - Ingests newly registered businesses from multiple sources (pluggable connectors).
+  - Runs a single unified pipeline: **validate → normalize → dedup → AI enrich → AI predict → AI score → persist**.
+  - Delivers daily intelligence: **in-app dashboards + PDF/Excel/CSV exports**, with optional scheduled email delivery.
+  - Enforces **JWT auth + RBAC** (Admin/Analyst/Subscriber) + **audit logs** for every mutation.
+  - Is India-first with a scalable geo model (start Mumbai/Thane/Navi Mumbai → scale India-wide).
+- Maintain a **CRED-inspired premium dark UI**: high-end B2B feel, data-dense but calm, mobile responsive.
 
 ## 2) Implementation Steps
 
-### Phase 1 — Core POC (Isolation; do not proceed until green)
+### Phase 1 — Core POC (Isolation; do not proceed until green) ✅ COMPLETED
 **Goal:** One Python script runs cleanly end-to-end.
 
-1. **Websearch quick playbook (30 min):**
-   - Best practice: SQLAlchemy async + asyncpg with Postgres in containers
-   - ReportLab vs WeasyPrint tradeoffs (pick one; default ReportLab)
-   - emergentintegrations structured JSON patterns + retries
+1. **PostgreSQL in container:**
+   - Installed PostgreSQL 15 and configured it.
+   - Added DB/user and connection variables (without touching `MONGO_URL`).
 
-2. **PostgreSQL in container:**
-   - Install/start postgres service; create DB/user; add `DATABASE_URL` (do not touch MONGO_URL).
-   - Verify connection from Python using SQLAlchemy async engine.
+2. **POC script `poc_core.py`:**
+   - Verified async SQLAlchemy + asyncpg read/write.
+   - Verified Emergent LLM structured JSON outputs for:
+     - enrichment
+     - predicted need
+     - lead scoring
 
-3. **POC script `poc_core.py`:**
-   - Create minimal schema (or run SQL DDL) for `businesses`, `predictions`, `lead_scores`.
-   - Insert 1 sample Mumbai business; read back.
-   - Call Emergent LLM (universal key) with **3 structured JSON outputs**:
-     - `enrich_business` (fill missing fields + infer category)
-     - `predict_needs` (predicted_need, probability, reasoning)
-     - `score_lead` (0–100 + HOT/WARM/COLD + reasoning)
-   - Persist prediction + score rows tied to business.
+3. **Report outputs:**
+   - Generated PDF (ReportLab), Excel (openpyxl), CSV.
 
-4. **Report generation outputs:**
-   - Generate a tiny daily report (JSON + PDF via ReportLab) from DB rows.
-   - Generate Excel export via openpyxl + CSV export.
+**Exit criteria:**
+- Script executed in a single run with all stages green.
 
-5. **Exit criteria:**
-   - Script prints: “DB OK / LLM OK / PDF OK / XLSX OK” and artifacts are readable.
-   - If anything fails: iterate prompts/schema/service startup until stable.
-
-**Phase 1 user stories (POC validation):**
-1. As a developer, I can connect to PostgreSQL from Python and read/write a business row.
-2. As a developer, I can enrich a business via LLM and get valid structured JSON.
-3. As a developer, I can predict needs with probability + reasoning in structured JSON.
-4. As a developer, I can score a lead and categorize HOT/WARM/COLD.
-5. As a developer, I can generate a PDF and an Excel file from DB data.
+**Artifacts:**
+- `/app/backend/poc_core.py`
 
 ---
 
-### Phase 2 — V1 App Development (MVP core + UI; delay OAuth/email “real sending”)
-**Goal:** Working app around the proven core; auth kept minimal to unblock testing (email/password first).
+### Phase 2 — V1 App Development (MVP core + UI) ✅ COMPLETED
+**Goal:** Working app around the proven core; RBAC + reports + exports + scheduler + audit.
 
-1. **Backend foundation (FastAPI + async SQLAlchemy + Alembic or idempotent DDL):**
-   - Implement normalized tables exactly as specified (`businesses`, `predictions`, `lead_scores`, `daily_reports`, `users`, `settings`, `audit_logs`, `user_preferences`, `saved_searches`).
-   - Add required indexes; ensure FK constraints; JSONB where specified.
+#### 2.1 Backend (FastAPI + async SQLAlchemy + asyncpg + PostgreSQL)
+**Implemented:**
+1. **Database (normalized + indexed; analytics-ready):**
+   - Tables: `users`, `businesses`, `predictions`, `lead_scores`, `daily_reports`, `settings`, `audit_logs`, `user_preferences`, `saved_searches`, `scheduler_runs`.
+   - Indexes on: `business_name`, `city`, `state`, `registration_date`, `pincode`, `lead_scores.score`, `predictions.predicted_need`, plus FK indexes.
+   - JSONB used for flexible payloads (`businesses.extra`, `daily_reports.report_json`, etc.).
 
-2. **Core pipeline services:**
-   - `IDiscoverySource` interface: `fetchBusinesses(), validate(), normalize(), deduplicate()`.
+2. **Auth + Security:**
+   - Email/password login (bcrypt + JWT via PyJWT).
+   - Force-password-reset flow.
+   - RBAC enforced across routes (Admin/Analyst/Subscriber).
+   - Google OAuth bootstrap endpoints:
+     - `/api/auth/google/status`
+     - `/api/auth/google/start`
+     (UI disables until configured in Settings; not hardcoded).
+
+3. **Discovery architecture (pluggable connectors):**
+   - `IDiscoverySource` interface semantics implemented.
    - Connectors:
-     - CSVUploadConnector (working)
-     - ManualEntryConnector (working)
-     - OpenCorporatesConnector (placeholder; empty if no key in Settings)
-     - MCAConnector (placeholder; empty + log)
-   - Pipeline: fetch→validate→normalize→dedup (name+pincode+(phone|email), fuzzy)→LLM enrich→predict→score→persist.
+     - `manual` (manual entry)
+     - `csv_upload` (CSV ingestion)
+     - `opencorporates` (**placeholder fetch**, token-aware)
+     - `mca` (**placeholder**)
+     - `sample_seed` (working; realistic Mumbai/Thane/Navi Mumbai synthetic discovery)
 
-3. **Reports + exports (in-app first):**
-   - `generate_daily_report(date, filters)` stores JSONB + PDF path/blob in `daily_reports`.
-   - Exports for filtered businesses: CSV/XLSX/PDF.
+4. **Unified pipeline:**
+   - Fuzzy dedup using RapidFuzz on normalized name + pincode + phone/email.
+   - AI pipeline via Emergent universal LLM key:
+     - enrichment (category, subcategory, company_type, employee_estimate, confidence_score)
+     - need prediction (predicted_need, probability, reasoning)
+     - lead scoring (score 0–100, HOT/WARM/COLD, scoring_reason)
 
-4. **Scheduler:**
-   - APScheduler on app startup: daily job to generate today’s report.
-   - Endpoint `/api/scheduler/status` for last run/next run/outcome.
+5. **Reports + exports:**
+   - Daily report generation: JSON + PDF (ReportLab) persisted.
+   - Exports:
+     - Businesses: CSV + XLSX (API endpoints)
+     - Reports: PDF + CSV + XLSX
 
-5. **Auth (MVP, test-friendly):**
-   - Email/password + JWT, bcrypt, RBAC dependencies.
-   - Seed Admin “Dhananjay” with **temp password printed to backend logs**, `force_password_reset=True`.
-   - Force-reset flow endpoint + UI.
+6. **Scheduler (APScheduler):**
+   - Daily report job scheduled at **08:00 IST** (configurable via Settings).
+   - Admin endpoints for:
+     - status (last runs + next run)
+     - run-now
+   - Scheduler run history stored in `scheduler_runs`.
 
-6. **Audit logs:**
-   - Middleware/service writes `audit_logs` for all mutating endpoints; failures must not break the request.
+7. **Email module (optional; system works without it):**
+   - `EmailService` design via pluggable providers:
+     - SendGrid provider (API-based)
+     - SMTP provider
+   - Provider credentials stored in Settings.
+   - If not configured: delivery is silently skipped; reports still generated and stored.
 
-7. **Frontend (React + shadcn/ui + Tailwind):**
-   - Routes: Login, Force Reset, Dashboard, Businesses (filters/search/export), Business Detail (tabs), Manual Entry, CSV Upload, Discovery, Reports, Preferences, Admin Users/Settings/Audit/Scheduler.
-   - Data-testid on interactive elements; mobile responsive.
+8. **Audit logs:**
+   - Every mutating action writes to `audit_logs` (non-fatal if logging fails).
 
-8. **Conclude Phase 2:**
-   - Run testing_agent_v3 E2E; fix blocker bugs.
+9. **Seeding (idempotent):**
+   - Creates:
+     - Primary admin: `dhananjay@businessradar.ai` (force_password_reset=true; temp password printed to logs)
+     - QA users:
+       - `test.admin@businessradar.ai / RadarTest@2025`
+       - `test.analyst@businessradar.ai / AnalystTest@2025`
+       - `test.subscriber@businessradar.ai / SubTest@2025`
+   - Inserts ~15 sample businesses using `sample_seed` connector with AI enrichment.
 
-**Phase 2 user stories (MVP):**
-1. As an Admin, I can log in with temp password and I’m forced to reset it.
-2. As an Analyst, I can upload a CSV, preview rows, commit, and see dedup results.
-3. As an Analyst, I can manually add a business and run enrich/predict/score.
-4. As a user, I can filter/search/sort/paginate businesses and open a detail view.
-5. As a user, I can view today’s daily report in-app and download PDF/XLSX/CSV.
+10. **PostgreSQL resilience:**
+   - PostgreSQL is managed via supervisor (`program:postgresql`).
+
+#### 2.2 Frontend (React 19 + shadcn/ui + Tailwind + Recharts + framer-motion)
+**Implemented:**
+1. **CRED-inspired premium dark theme:**
+   - Near-black canvas, gold accents, glassy surfaces, eyebrow labels, refined motion.
+   - HOT/WARM/COLD status pills.
+
+2. **Routes (all delivered):**
+- `/login`
+- `/force-reset`
+- `/dashboard`
+- `/businesses`
+- `/businesses/:id`
+- `/businesses/new`
+- `/businesses/upload`
+- `/discovery`
+- `/reports`
+- `/reports/:id`
+- `/preferences`
+- `/admin/users`
+- `/admin/settings`
+- `/admin/audit-logs`
+- `/admin/scheduler`
+
+3. **RBAC UI enforcement:**
+   - Subscriber sees read-only nav and actions.
+   - Analyst/Admin see mutation actions.
+
+4. **Mobile responsiveness:**
+   - Sidebar via sheet drawer.
+   - Filter rail becomes mobile sheet.
+
+5. **Testing readiness:**
+   - `data-testid` coverage across interactive elements.
 
 ---
 
-### Phase 3 — Add Integrations + Hardening (OAuth + email + saved searches)
-**Goal:** Turn placeholders into configurable integrations; improve reliability for scale.
+### Phase 3 — Add Integrations + Hardening (OAuth + email + real discovery) 🔜 NEXT
+**Goal:** Convert placeholders into real integrations; production hardening for scale.
 
-1. **Admin Settings UI/API (singleton settings):**
-   - Store Google OAuth client id/secret + email provider settings; validate inputs.
+1. **Google OAuth completion:**
+   - Implement callback endpoint + token exchange + user provisioning.
+   - Support multiple OAuth providers in future.
 
-2. **Google OAuth (customer-owned creds):**
-   - Enable Google login button only when configured.
-   - Store provider fields in `users`; keep email/password backup.
+2. **Email delivery completion:**
+   - Attach PDF report and/or provide secure download links.
+   - Add delivery logs table (sent/skipped/failure reasons).
 
-3. **Email module (must be optional):**
-   - `EmailService` interface + SendGrid/SMTP providers (both configurable; no hardcode).
-   - Scheduled send of daily/weekly reports to opted-in users; if not configured, log + skip.
+3. **Real OpenCorporates integration:**
+   - Implement actual API calls (requires user-provided token).
+   - Improve normalization + pagination/ratelimiting.
 
-4. **User preferences + saved searches:**
-   - Default filters, delivery email, daily/weekly toggles.
+4. **MCA connector strategy:**
+   - Keep placeholder unless captcha/login solution is approved.
+   - Optionally add “manual MCA CSV export import” workflow as an interim solution.
 
-5. **Scale readiness:**
-   - Add keyset pagination option, query plan checks, index tuning.
-   - Prepare partitioning notes for `businesses` by registration_date/state (no migration yet).
+5. **Scale hardening:**
+   - Alembic migrations.
+   - Query plan checks + index tuning.
+   - Partitioning strategy for `businesses` by `registration_date`/`state`.
+   - Observability (structured logs, metrics) and rate limiting.
 
-6. **Conclude Phase 3:**
-   - Run testing_agent_v3 E2E; fix issues.
+6. **Security hardening:**
+   - Remove/rotate seeded QA accounts in production.
+   - Optional MFA/2FA.
 
 **Phase 3 user stories:**
-1. As an Admin, I can configure Google OAuth and then log in via Google.
-2. As an Admin, I can configure email provider settings without restarting the app.
-3. As a user, I can enable daily emails and receive/download the report (or see “skipped” if not configured).
-4. As a user, I can save a search filter and reuse it.
-5. As an Admin, I can review audit logs for user and settings changes.
+1. As an Admin, I can configure Google OAuth and complete Google sign-in.
+2. As an Admin, I can configure email delivery and see delivery logs.
+3. As an Analyst, I can run real OpenCorporates discovery and ingest results.
+4. As an Admin, I can manage scale features (migrations, scheduling, partition notes).
 
 ---
 
 ### Phase 4 — Discovery Expansion + Quality (optional next)
-- OpenCorporates real API integration when key is provided; stronger normalization.
-- MCA connector remains placeholder until captcha/login solution is approved.
-- Add background jobs for batch enrichment/scoring; better retry/timeout handling.
+- WhatsApp/Telegram delivery.
+- API-based report delivery for Enterprise/Reseller/API Partner.
+- Bulk/background enrichment and scoring with retry queues.
+- Advanced dedup entity resolution across states.
+- Saved searches UI enhancements + alerts.
 
 ## 3) Next Actions (immediate)
-1. Implement Phase 1 `poc_core.py` and run until fully green.
-2. Lock JSON schemas for LLM outputs (pydantic models + strict validation + retries).
-3. Decide PDF engine (ReportLab default) and finalize report layout for MVP.
-4. Once POC is green, generate DB migrations and start Phase 2 build.
+1. **Decide integration scope for next iteration:**
+   - Provide OpenCorporates API token to enable real discovery.
+   - Provide SendGrid key (optional) and confirm sender domain.
+   - Provide Google OAuth Client ID/Secret + Redirect URI.
+2. **Production readiness checklist:**
+   - Remove/rotate QA users.
+   - Configure JWT secret + DB credentials securely.
+   - Enable HTTPS-only cookie storage if moving to cookie-based auth.
+3. **Hardening improvements:**
+   - Add Alembic migrations.
+   - Add delivery logs table.
+   - Add keyset pagination for large datasets.
 
 ## 4) Success Criteria
-- **POC:** Single script successfully (a) writes/reads Postgres, (b) gets structured enrichment/prediction/scoring via Emergent LLM, (c) generates valid PDF + XLSX + CSV.
-- **MVP:** Users can ingest businesses (CSV/manual), dedup/enrich/predict/score them, browse/filter/export, and generate/view daily reports; scheduler status visible; audit logs recorded.
-- **Integrations:** OAuth and email are **configurable**, disabled gracefully when not set; no crashes; reports stored regardless of email status.
-- **Performance:** Queries remain responsive with indexes; pagination works; schema ready for future partitioning.
+- **POC:** ✅ Completed — Postgres + structured AI JSON + PDF/XLSX/CSV green in a single run.
+- **MVP:** ✅ Completed — ingestion (manual/CSV/discovery), dedup/enrich/predict/score, browse/filter, in-app reports + exports, scheduler status, audit logs.
+- **Integrations:** UI and backend are **configurable and safe-by-default**:
+  - Google OAuth is present but disabled until configured.
+  - Email delivery never blocks report generation.
+  - Discovery connectors support placeholders and future real integrations.
+- **Quality:** ✅ E2E validated (testing_agent_v3): backend 41/41 pass; frontend issues fixed (Subscriber “Add” button hidden).
+- **Scale readiness:** normalized schema + indexes present; migration + partitioning + observability planned for Phase 3.
