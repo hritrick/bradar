@@ -1,4 +1,4 @@
-"""Auth routes."""
+"""Auth routes — with login rate limiting on /login."""
 import os
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -11,12 +11,15 @@ from security import verify_password, hash_password, create_access_token
 from deps import get_current_user
 from audit import write_audit
 from settings_service import get_setting
+from rate_limit import rate_limit_login, rate_limit_clear_login
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=Token)
 async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    # Rate-limit by client IP (burst + per-minute). Raises HTTP 429 if exceeded.
+    rate_limit_login(request)
     res = await db.execute(select(User).where(User.email == body.email.lower()))
     user = res.scalar_one_or_none()
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
@@ -26,6 +29,7 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     user.last_login_at = datetime.utcnow()
     await db.commit()
     token = create_access_token(user.id, extra={"role": user.role, "email": user.email})
+    rate_limit_clear_login(request)
     await write_audit(db, user_id=user.id, user_email=user.email, action="login", entity_type="user", entity_id=user.id,
                       ip_address=request.client.host if request.client else None,
                       user_agent=request.headers.get("user-agent"))

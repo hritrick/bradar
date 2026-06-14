@@ -1,38 +1,58 @@
 [
   {
-    "content": "Phase 3: Backend - extend schema (gst_number, industry, discovery_sources, discovery_source_runs, enrichment_queue)",
-    "status": "completed"
+    "content": "Security: Fix JWT secret (generate strong, fail-fast in prod, document rotation)",
+    "status": "in_progress"
   },
   {
-    "content": "Phase 3: Backend - formalize BusinessDiscoveryProvider interface + 7 providers",
-    "status": "completed"
+    "content": "Security: Restrict CORS (env-driven, refuse * in prod)",
+    "status": "pending"
   },
   {
-    "content": "Phase 3: Backend - pipeline v2 (dedup by GST/website/phone/name+pincode), geo intelligence step, enrichment queue",
-    "status": "completed"
+    "content": "Security: Gate test users by APP_ENV (no QA users in production)",
+    "status": "pending"
   },
   {
-    "content": "Phase 3: Backend - admin controls + health dashboard endpoints",
-    "status": "completed"
+    "content": "Security: Add login rate limiting (sliding window per IP)",
+    "status": "pending"
   },
   {
-    "content": "Phase 3: Backend - background enrichment worker",
-    "status": "completed"
+    "content": "Reports: Pluggable storage_service (LocalDisk + S3-compatible: R2/MinIO/S3)",
+    "status": "pending"
   },
   {
-    "content": "Phase 3: Backend - 10k synthetic seed (Mumbai/Thane/Navi Mumbai, 6 industries) without AI",
-    "status": "completed"
+    "content": "Database: Alembic migrations (drop create_all, initial baseline, startup upgrade)",
+    "status": "pending"
   },
   {
-    "content": "Phase 3: Backend - refactor dashboard/reports aggregations to SQL (perf for 10k)",
-    "status": "completed"
+    "content": "Database: Backup strategy (pg_dump script + runbook + retention)",
+    "status": "pending"
   },
   {
-    "content": "Phase 3: Frontend - new Discovery page (health + provider cards + admin controls + logs)",
-    "status": "completed"
+    "content": "Database: Move DB outside app pod (env-driven, retry, document managed-DB migration)",
+    "status": "pending"
   },
   {
-    "content": "Phase 3: Test end-to-end with testing_agent_v3",
-    "status": "completed"
+    "content": "Discovery: Register schedule_cron with APScheduler (startup + on-PATCH)",
+    "status": "pending"
+  },
+  {
+    "content": "Discovery: Retry mechanism with exponential backoff (providers + LLM)",
+    "status": "pending"
+  },
+  {
+    "content": "Discovery: Lineage tracking (source_run_id FK on businesses)",
+    "status": "pending"
+  },
+  {
+    "content": "Discovery: Idempotency keys (Idempotency-Key header on run endpoints)",
+    "status": "pending"
+  },
+  {
+    "content": "Discovery: Source health monitoring (rolling error rate + alert flag)",
+    "status": "pending"
+  },
+  {
+    "content": "Test end-to-end with testing_agent_v3",
+    "status": "pending"
   }
 ]

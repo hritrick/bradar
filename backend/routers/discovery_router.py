@@ -1,18 +1,29 @@
-"""Discovery routes — provider architecture, source admin, health dashboard, run logs."""
+"""Discovery routes — provider architecture, source admin, health, run logs.
+
+Adds:
+  * Idempotency-Key header support on POST /run and /sources/{id}/run.
+  * Source health monitoring endpoint.
+  * Re-register APScheduler jobs when admin patches schedule_cron / enabled.
+  * Lineage: stamps source_run_id on inserted businesses.
+"""
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, Header
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db, SessionLocal
-from models import User, DiscoverySource, DiscoverySourceRun, Business, EnrichmentQueueItem, Prediction, LeadScore
+from models import (
+    User, DiscoverySource, DiscoverySourceRun, Business, EnrichmentQueueItem, Prediction, LeadScore,
+)
 from schemas import DiscoveryRunRequest, DiscoveryRunResponse
 from deps import require_roles, get_current_user
 from audit import write_audit
 from providers import build_providers, provider_metadata, get_provider
 from pipeline import ingest_batch
 import enrichment_worker
+import idempotency
+from health_monitor import health_for_source
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 log = logging.getLogger(__name__)
@@ -21,14 +32,12 @@ ADMIN = require_roles(["Admin"])
 
 
 async def _sync_source_records(db: AsyncSession) -> None:
-    """Ensure a DiscoverySource row exists for each provider class."""
     metas = await provider_metadata()
     existing = {r.name: r for r in (await db.execute(select(DiscoverySource))).scalars().all()}
     changed = False
     for m in metas:
         if m["name"] in existing:
             r = existing[m["name"]]
-            # keep enable/schedule but refresh display fields
             if r.display_name != m["display_name"] or r.description != m["description"]:
                 r.display_name = m["display_name"]
                 r.description = m["description"]
@@ -40,7 +49,7 @@ async def _sync_source_records(db: AsyncSession) -> None:
                 display_name=m["display_name"],
                 description=m["description"],
                 requires_config=m["requires_config"],
-                enabled=(m["name"] in ("manual", "csv_import", "synthetic")),  # safe defaults
+                enabled=(m["name"] in ("manual", "csv_import", "synthetic")),
             ))
             changed = True
     if changed:
@@ -49,7 +58,6 @@ async def _sync_source_records(db: AsyncSession) -> None:
 
 @router.get("/connectors")
 async def list_connectors_legacy(_: User = Depends(get_current_user)):
-    """Backward-compatible alias for /discovery/sources."""
     return await provider_metadata()
 
 
@@ -91,9 +99,15 @@ async def update_source(source_id: str, body: Dict[str, Any], request: Request,
     if "enabled" in body:
         r.enabled = bool(body["enabled"])
     if "schedule_cron" in body:
-        r.schedule_cron = body["schedule_cron"] or None
+        r.schedule_cron = (body["schedule_cron"] or None)
     await db.commit()
     await db.refresh(r)
+    # Reflect changes in APScheduler
+    try:
+        from scheduler import register_source_schedules
+        await register_source_schedules()
+    except Exception as e:
+        log.warning("could not re-register schedules: %s", e)
     await write_audit(db, user_id=me.id, user_email=me.email, action="update_discovery_source",
                       entity_type="discovery_source", entity_id=r.id, before_value=before,
                       after_value={"enabled": r.enabled, "schedule_cron": r.schedule_cron},
@@ -103,7 +117,6 @@ async def update_source(source_id: str, body: Dict[str, Any], request: Request,
 
 
 async def _execute_run(source_name: str, limit: int, query: Optional[Dict[str, Any]], triggered_by: str) -> Dict[str, Any]:
-    """Core run: provider → normalize → validate → dedup (in-batch + DB) → ingest → queue."""
     provider = await get_provider(source_name)
     if not provider:
         return {"error": f"Unknown source: {source_name}"}
@@ -115,17 +128,16 @@ async def _execute_run(source_name: str, limit: int, query: Optional[Dict[str, A
             return {"error": f"Source '{source_name}' is disabled by admin"}
         if not provider.configured and source_name not in ("manual", "csv_import", "synthetic"):
             return {"error": f"Source '{source_name}' is not configured"}
-
         run = DiscoverySourceRun(source_id=src_row.id, source_name=source_name, triggered_by=triggered_by)
         db.add(run)
         await db.commit()
         await db.refresh(run)
+        source_run_id = run.id
 
     try:
         raw_rows = await provider.discover_businesses(limit=limit, query=query)
         records_found = len(raw_rows)
-        normalized = []
-        invalid = 0
+        normalized, invalid = [], 0
         for raw in raw_rows:
             try:
                 n = provider.normalize_data(raw)
@@ -133,24 +145,23 @@ async def _execute_run(source_name: str, limit: int, query: Optional[Dict[str, A
                 if not v.valid:
                     invalid += 1
                     continue
+                n["source_run_id"] = source_run_id  # lineage stamp
                 normalized.append(n)
             except Exception as e:
                 invalid += 1
                 log.warning(f"normalize/validate failed: {e}")
 
-        # Dedup via provider's deduplicate method (uses our find_duplicate_v2)
         async def find_dup_db(c):
             from pipeline import find_duplicate_v2
             async with SessionLocal() as db2:
                 return await find_duplicate_v2(db2, c)
         unique, batch_dups = await provider.deduplicate(normalized, find_dup_db)
 
-        # Ingest in one transaction
         async with SessionLocal() as db:
             counts = await ingest_batch(db, unique, run_ai=False, queue_for_enrichment=True)
 
         async with SessionLocal() as db:
-            r = (await db.execute(select(DiscoverySourceRun).where(DiscoverySourceRun.id == run.id))).scalar_one()
+            r = (await db.execute(select(DiscoverySourceRun).where(DiscoverySourceRun.id == source_run_id))).scalar_one()
             r.records_found = records_found
             r.invalid_records = invalid
             r.duplicates_removed = len(batch_dups) + counts["duplicates"]
@@ -159,20 +170,18 @@ async def _execute_run(source_name: str, limit: int, query: Optional[Dict[str, A
             r.status = "success"
             r.finished_at = datetime.utcnow()
             r.message = f"OK — added {counts['inserted']}, dups {r.duplicates_removed}, invalid {invalid}."
-            # Update source row last-run
             src = (await db.execute(select(DiscoverySource).where(DiscoverySource.id == r.source_id))).scalar_one()
             src.last_run_at = r.finished_at
             src.last_run_status = r.status
             src.last_run_summary = {
-                "records_found": r.records_found,
-                "records_added": r.records_added,
-                "duplicates_removed": r.duplicates_removed,
-                "errors_count": r.errors_count,
+                "records_found": r.records_found, "records_added": r.records_added,
+                "duplicates_removed": r.duplicates_removed, "errors_count": r.errors_count,
                 "enrichment_queued": r.enrichment_queued,
             }
             await db.commit()
         return {
             "source": source_name,
+            "source_run_id": source_run_id,
             "records_found": records_found,
             "records_added": counts["inserted"],
             "duplicates_removed": (len(batch_dups) + counts["duplicates"]),
@@ -183,55 +192,78 @@ async def _execute_run(source_name: str, limit: int, query: Optional[Dict[str, A
     except Exception as e:
         log.exception("Discovery run failed")
         async with SessionLocal() as db:
-            r = (await db.execute(select(DiscoverySourceRun).where(DiscoverySourceRun.id == run.id))).scalar_one()
+            r = (await db.execute(select(DiscoverySourceRun).where(DiscoverySourceRun.id == source_run_id))).scalar_one()
             r.status = "failed"
             r.errors_count = 1
             r.errors = [str(e)[:300]]
             r.finished_at = datetime.utcnow()
             r.message = str(e)[:300]
+            src = (await db.execute(select(DiscoverySource).where(DiscoverySource.id == r.source_id))).scalar_one()
+            src.last_run_at = r.finished_at
+            src.last_run_status = "failed"
             await db.commit()
-        return {"source": source_name, "records_found": 0, "records_added": 0, "duplicates_removed": 0, "invalid_records": 0, "enrichment_queued": 0, "errors": [str(e)[:300]]}
+        return {"source": source_name, "source_run_id": source_run_id, "records_found": 0,
+                "records_added": 0, "duplicates_removed": 0, "invalid_records": 0,
+                "enrichment_queued": 0, "errors": [str(e)[:300]]}
 
 
 @router.post("/run", response_model=DiscoveryRunResponse)
-async def run_discovery_legacy(body: DiscoveryRunRequest, request: Request, me: User = Depends(ANALYST_OR_ADMIN)):
+async def run_discovery_legacy(body: DiscoveryRunRequest, request: Request,
+                              me: User = Depends(ANALYST_OR_ADMIN),
+                              idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")):
+    payload = body.model_dump(mode="json")
+    if idempotency_key:
+        cached = await idempotency.check_or_record(idempotency_key, "discovery_run", payload)
+        if cached and not cached.get("pending"):
+            return DiscoveryRunResponse(**{
+                "source": cached.get("source", body.source),
+                "fetched": cached.get("records_found", 0),
+                "inserted": cached.get("records_added", 0),
+                "duplicates": cached.get("duplicates_removed", 0),
+                "enriched": cached.get("enrichment_queued", 0),
+                "errors": cached.get("errors", []),
+            })
     res = await _execute_run(body.source, body.limit, body.query, triggered_by=me.email)
-    async with SessionLocal() as db:
-        await write_audit(db, user_id=me.id, user_email=me.email, action="discovery_run",
-                          entity_type="discovery", entity_id=body.source,
-                          after_value=res,
-                          ip_address=request.client.host if request.client else None,
-                          user_agent=request.headers.get("user-agent"))
     if "error" in res:
         raise HTTPException(400, res["error"])
+    if idempotency_key:
+        await idempotency.store_result(idempotency_key, "discovery_run", res)
+    async with SessionLocal() as db:
+        await write_audit(db, user_id=me.id, user_email=me.email, action="discovery_run",
+                          entity_type="discovery", entity_id=body.source, after_value=res,
+                          ip_address=request.client.host if request.client else None,
+                          user_agent=request.headers.get("user-agent"))
     return DiscoveryRunResponse(
-        source=res["source"],
-        fetched=res["records_found"],
-        inserted=res["records_added"],
-        duplicates=res["duplicates_removed"],
-        enriched=res["enrichment_queued"],
-        errors=res["errors"],
+        source=res["source"], fetched=res["records_found"], inserted=res["records_added"],
+        duplicates=res["duplicates_removed"], enriched=res["enrichment_queued"], errors=res["errors"],
     )
 
 
 @router.post("/sources/{source_id}/run")
 async def run_now(source_id: str, body: Optional[Dict[str, Any]] = None, request: Request = None,
-                 me: User = Depends(ANALYST_OR_ADMIN)):
+                 me: User = Depends(ANALYST_OR_ADMIN),
+                 idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")):
     async with SessionLocal() as db:
         src = (await db.execute(select(DiscoverySource).where(DiscoverySource.id == source_id))).scalar_one_or_none()
         if not src:
             raise HTTPException(404, "Source not found")
     limit = (body or {}).get("limit", 20)
     query = (body or {}).get("query")
+    payload = {"source_id": source_id, "limit": limit, "query": query}
+    if idempotency_key:
+        cached = await idempotency.check_or_record(idempotency_key, f"src_run:{source_id}", payload)
+        if cached and not cached.get("pending"):
+            return cached
     res = await _execute_run(src.name, limit, query, triggered_by=me.email)
-    async with SessionLocal() as db:
-        await write_audit(db, user_id=me.id, user_email=me.email, action="discovery_run",
-                          entity_type="discovery_source", entity_id=src.id,
-                          after_value=res,
-                          ip_address=request.client.host if request and request.client else None,
-                          user_agent=request.headers.get("user-agent") if request else None)
     if "error" in res:
         raise HTTPException(400, res["error"])
+    if idempotency_key:
+        await idempotency.store_result(idempotency_key, f"src_run:{source_id}", res)
+    async with SessionLocal() as db:
+        await write_audit(db, user_id=me.id, user_email=me.email, action="discovery_run",
+                          entity_type="discovery_source", entity_id=src.id, after_value=res,
+                          ip_address=request.client.host if request and request.client else None,
+                          user_agent=request.headers.get("user-agent") if request else None)
     return res
 
 
@@ -253,11 +285,19 @@ async def source_runs(source_id: str, limit: int = 50,
             "records_found": r.records_found, "records_added": r.records_added,
             "duplicates_removed": r.duplicates_removed, "invalid_records": r.invalid_records,
             "errors_count": r.errors_count, "errors": r.errors or [],
-            "enrichment_queued": r.enrichment_queued,
-            "message": r.message,
+            "enrichment_queued": r.enrichment_queued, "message": r.message,
         }
         for r in runs
     ]
+
+
+@router.get("/sources/{source_id}/health")
+async def source_health_endpoint(source_id: str, lookback_hours: int = 24,
+                                db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    src = (await db.execute(select(DiscoverySource).where(DiscoverySource.id == source_id))).scalar_one_or_none()
+    if not src:
+        raise HTTPException(404, "Source not found")
+    return await health_for_source(db, source_id, lookback_hours=lookback_hours)
 
 
 @router.get("/health")
@@ -265,7 +305,6 @@ async def source_health(db: AsyncSession = Depends(get_db), _: User = Depends(ge
     await _sync_source_records(db)
     metas = {m["name"]: m for m in await provider_metadata()}
     srcs = (await db.execute(select(DiscoverySource).order_by(DiscoverySource.display_name))).scalars().all()
-    # Aggregate per source
     per_source = []
     total_added = total_found = total_dups = total_errors = 0
     for s in srcs:
@@ -280,34 +319,27 @@ async def source_health(db: AsyncSession = Depends(get_db), _: User = Depends(ge
         )).first()
         found, added, dups, errs, runs_count = agg
         m = metas.get(s.name, {})
+        rolling = await health_for_source(db, s.id, lookback_hours=24)
         per_source.append({
-            "id": s.id,
-            "name": s.name,
-            "display_name": s.display_name,
-            "enabled": s.enabled,
-            "configured": m.get("configured", False),
-            "requires_config": s.requires_config or [],
-            "schedule_cron": s.schedule_cron,
+            "id": s.id, "name": s.name, "display_name": s.display_name,
+            "enabled": s.enabled, "configured": m.get("configured", False),
+            "requires_config": s.requires_config or [], "schedule_cron": s.schedule_cron,
             "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
             "last_run_status": s.last_run_status,
-            "records_found": int(found or 0),
-            "records_added": int(added or 0),
-            "duplicates_removed": int(dups or 0),
-            "errors": int(errs or 0),
-            "runs": int(runs_count or 0),
+            "records_found": int(found or 0), "records_added": int(added or 0),
+            "duplicates_removed": int(dups or 0), "errors": int(errs or 0), "runs": int(runs_count or 0),
+            "alert": rolling["alert"],
+            "rolling_24h": rolling,
         })
         total_found += int(found or 0)
         total_added += int(added or 0)
         total_dups += int(dups or 0)
         total_errors += int(errs or 0)
-    # Enrichment queue status
     q = await enrichment_worker.queue_size()
     return {
         "totals": {
-            "records_found": total_found,
-            "records_added": total_added,
-            "duplicates_removed": total_dups,
-            "errors": total_errors,
+            "records_found": total_found, "records_added": total_added,
+            "duplicates_removed": total_dups, "errors": total_errors,
             "sources_enabled": sum(1 for s in srcs if s.enabled),
             "sources_total": len(srcs),
         },

@@ -1,4 +1,7 @@
-"""AI service: enrichment + prediction + scoring using Emergent LLM key."""
+"""AI service: enrichment + prediction + scoring using Emergent LLM key.
+
+All outbound LLM calls are retried with exponential backoff on transient errors.
+"""
 import json
 import logging
 import os
@@ -7,6 +10,9 @@ from typing import Optional
 from dotenv import load_dotenv
 from pathlib import Path
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+import httpx
+import asyncio
+from retry_util import retry_async
 
 load_dotenv(Path(__file__).parent / ".env")
 LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
@@ -14,15 +20,28 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 log = logging.getLogger(__name__)
 
+LLM_RETRYABLE = (
+    asyncio.TimeoutError,
+    httpx.TimeoutException,
+    httpx.ConnectError,
+    httpx.RemoteProtocolError,
+    httpx.ReadTimeout,
+    ConnectionError,
+)
 
-async def _llm_json(system: str, user: str) -> dict:
+
+@retry_async(max_attempts=3, base_delay=0.7, max_delay=6.0, retryable=LLM_RETRYABLE)
+async def _llm_call(system: str, user: str) -> str:
     session_id = f"radar-{uuid.uuid4()}"
     chat = (
         LlmChat(api_key=LLM_KEY, session_id=session_id, system_message=system)
         .with_model(LLM_PROVIDER, LLM_MODEL)
     )
-    msg = UserMessage(text=user + "\n\nRespond with ONLY a valid JSON object. No prose, no markdown fences.")
-    raw = await chat.send_message(msg)
+    return await chat.send_message(UserMessage(text=user + "\n\nRespond with ONLY a valid JSON object. No prose, no markdown fences."))
+
+
+async def _llm_json(system: str, user: str) -> dict:
+    raw = await _llm_call(system, user)
     text = (raw or "").strip()
     if text.startswith("```"):
         text = text.strip("`")
@@ -81,7 +100,6 @@ async def score_lead(b: dict) -> dict:
 
 
 async def run_full_ai_pipeline(b: dict) -> dict:
-    """Returns dict with keys: enrich, predict, score (each a dict). Best-effort; logs and returns partial results on failure."""
     result = {"enrich": None, "predict": None, "score": None, "errors": []}
     try:
         result["enrich"] = await enrich_business(b)

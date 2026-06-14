@@ -57,6 +57,7 @@ class Business(Base):
     longitude = Column(Float)
     source = Column(String(80), index=True)
     source_url = Column(String(500))
+    source_run_id = Column(String, ForeignKey("discovery_source_runs.id", ondelete="SET NULL"), nullable=True, index=True)
     confidence_score = Column(Float, default=0.5)
     enrichment_status = Column(String(20), default="pending", index=True)  # pending / queued / enriched / failed
     extra = Column(JSONB, default=dict)
@@ -157,6 +158,18 @@ class SchedulerJobRun(Base):
     finished_at = Column(DateTime, nullable=True)
     status = Column(String(30), default="running")
     message = Column(Text, nullable=True)
+
+
+class IdempotencyKey(Base):
+    __tablename__ = "idempotency_keys"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    key = Column(String(120), nullable=False, index=True)
+    scope = Column(String(80), nullable=False, index=True)
+    payload_hash = Column(String(128), nullable=False)
+    response = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    __table_args__ = (UniqueConstraint("key", "scope", name="uq_idempotency_key_scope"),)
 
 
 class DiscoverySource(Base):
