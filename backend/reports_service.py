@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import Business, Prediction, LeadScore, DailyReport
 
 log = logging.getLogger(__name__)
-REPORTS_DIR = Path("/app/backend/reports_out")
+REPORTS_DIR = Path(__file__).parent / "reports_out"
 REPORTS_DIR.mkdir(exist_ok=True, parents=True)
 
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { AppLink as Link, NavLink, useLocation } from '../../lib/router';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Building2, FilePlus2, Upload, Compass, FileText,

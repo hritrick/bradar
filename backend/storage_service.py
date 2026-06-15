@@ -170,7 +170,7 @@ def get_storage() -> StorageProvider:
                 return _storage
             except Exception as e:
                 log.warning("Could not initialise S3 storage (%s) — falling back to local.", e)
-    base_dir = os.environ.get("STORAGE_LOCAL_DIR") or "/app/backend/reports_out"
+    base_dir = os.environ.get("STORAGE_LOCAL_DIR") or str(Path(__file__).parent / "reports_out")
     _storage = LocalDiskStorage(base_dir)
     log.info("Storage: LocalDiskStorage at %s", base_dir)
     return _storage

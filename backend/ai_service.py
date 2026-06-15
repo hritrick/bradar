@@ -1,4 +1,4 @@
-"""AI service: enrichment + prediction + scoring using Emergent LLM key.
+"""AI service: enrichment + prediction + scoring via optional hosted LLM integration.
 
 All outbound LLM calls are retried with exponential backoff on transient errors.
 """
@@ -9,13 +9,18 @@ import uuid
 from typing import Optional
 from dotenv import load_dotenv
 from pathlib import Path
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 import httpx
 import asyncio
 from retry_util import retry_async
 
+try:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+except ImportError:
+    LlmChat = None
+    UserMessage = None
+
 load_dotenv(Path(__file__).parent / ".env")
-LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
+LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 log = logging.getLogger(__name__)
@@ -32,6 +37,8 @@ LLM_RETRYABLE = (
 
 @retry_async(max_attempts=3, base_delay=0.7, max_delay=6.0, retryable=LLM_RETRYABLE)
 async def _llm_call(system: str, user: str) -> str:
+    if not LlmChat or not UserMessage or not LLM_KEY:
+        raise RuntimeError("Hosted LLM integration is not configured")
     session_id = f"radar-{uuid.uuid4()}"
     chat = (
         LlmChat(api_key=LLM_KEY, session_id=session_id, system_message=system)
@@ -55,6 +62,14 @@ async def _llm_json(system: str, user: str) -> dict:
 
 
 async def enrich_business(b: dict) -> dict:
+    if not LLM_KEY or not LlmChat:
+        return {
+            "category": b.get("category") or b.get("industry") or "General Services",
+            "sub_category": b.get("sub_category") or "Unclassified",
+            "company_type": b.get("company_type") or "Private Limited",
+            "employee_estimate": int(b.get("employee_estimate") or 10),
+            "confidence_score": float(b.get("confidence_score") or 0.35),
+        }
     system = (
         "You are an expert business data enrichment analyst for the Indian B2B market. "
         "Given partial business data, infer realistic missing fields without hallucinating proprietary data. "
@@ -70,6 +85,22 @@ async def enrich_business(b: dict) -> dict:
 
 
 async def predict_needs(b: dict) -> dict:
+    if not LLM_KEY or not LlmChat:
+        industry = (b.get("industry") or "").lower()
+        predicted_need = "Digital Marketing"
+        if "manufact" in industry:
+            predicted_need = "ERP Software"
+        elif "logistic" in industry:
+            predicted_need = "Logistics Tech"
+        elif "health" in industry:
+            predicted_need = "Compliance"
+        elif "real estate" in industry:
+            predicted_need = "Legal & Trademark"
+        return {
+            "predicted_need": predicted_need,
+            "probability": 0.58,
+            "reasoning": "Local fallback prediction used because hosted LLM credentials are not configured.",
+        }
     system = (
         "You are a B2B service-needs prediction expert focused on Indian companies. "
         "Based on a business profile (industry, recency, size), pick the SINGLE most likely service need they will require in the next 6 months."
@@ -85,6 +116,15 @@ async def predict_needs(b: dict) -> dict:
 
 
 async def score_lead(b: dict) -> dict:
+    if not LLM_KEY or not LlmChat:
+        size = int(b.get("employee_estimate") or 0)
+        completeness = sum(1 for key in ("phone", "email", "website", "city", "industry") if b.get(key))
+        score = min(95, 35 + min(size, 40) + completeness * 5)
+        return {
+            "score": score,
+            "lead_category": "HOT" if score >= 75 else "WARM" if score >= 50 else "COLD",
+            "scoring_reason": "Local fallback scoring used because hosted LLM credentials are not configured.",
+        }
     system = (
         "You are a lead quality scoring expert for Indian B2B service providers. "
         "Score the lead 0-100 considering: size signals, data completeness, recency, category attractiveness for outbound, and contactability."
