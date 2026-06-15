@@ -1,34 +1,34 @@
 [
   {
-    "content": "Inspect current state of all 7 modules",
-    "status": "completed"
+    "content": "Add RawDiscoveryRecord model + Alembic migration 0003 (id, source_run_id, source_name, raw_payload, normalized_payload, discovery_status, confidence_band, business_id/duplicate_of, error_message, denormalized filter fields, archived_at, indexes)",
+    "status": "in_progress"
   },
   {
-    "content": "Verify Alembic migration state via direct DB check",
-    "status": "completed"
+    "content": "Add director-based dedup as 4th rule in pipeline.find_duplicate_v2",
+    "status": "pending"
   },
   {
-    "content": "Run focused backend testing via testing_agent on all 7 areas",
-    "status": "completed"
+    "content": "Refactor discovery_router._execute_run to persist raw payloads up-front and update per-record status (new/processed/duplicate/failed) throughout pipeline",
+    "status": "pending"
   },
   {
-    "content": "Fix bug: schema drift — businesses.source_run_id missing in DB",
-    "status": "completed"
+    "content": "Build new routes: GET /raw-records (paginated, filtered), GET /raw-records/{id}, POST /retry, POST /reprocess, GET /export (CSV), GET /source-quality analytics",
+    "status": "pending"
   },
   {
-    "content": "Fix bug: DailyReportOut schema missing report_pdf field",
-    "status": "completed"
+    "content": "Add schedule presets endpoint + retention cleanup APScheduler job (archive 180d, delete 365d)",
+    "status": "pending"
   },
   {
-    "content": "Fix bug: global exception handler not logging traceback",
-    "status": "completed"
+    "content": "Frontend: build DiscoveryRecords.jsx page with table, status badges, filters (source/date/status/city), row actions (retry/reprocess/view raw modal), source quality cards, export button",
+    "status": "pending"
   },
   {
-    "content": "Re-run testing_agent to verify all 7 areas pass",
-    "status": "completed"
+    "content": "Frontend: add schedule preset dropdown to Discovery source admin UI",
+    "status": "pending"
   },
   {
-    "content": "Update plan.md with verification results",
-    "status": "completed"
+    "content": "Add nav link, wire route, run lint, smoke test, then call testing_agent",
+    "status": "pending"
   }
 ]
